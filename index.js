@@ -36,8 +36,8 @@ function getBaseSites(selection) {
 }
 
 const app = express();
-const httpHost = options.httpHost;
-const port = Number(options.httpPort);
+const httpHost = process.env.HOST || options.httpHost;
+const port = Number(process.env.PORT || options.httpPort);
 const currentLanguage = options.vavooLanguage;
 const currentRegion = options.vavooRegion;
 const vavooUrlList = options.vavooUrlList;
@@ -773,7 +773,7 @@ app.get('/stream/:id', async function (req, res) {
     }
 });
 
-app.listen(port, () => {
+app.listen(port, httpHost, () => {
     const baseUrl = getLocalBaseUrl();
     console.log(`Listening on ${baseUrl}/`);
     console.log(`M3U: ${baseUrl}/channels.m3u8`);
