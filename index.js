@@ -693,7 +693,14 @@ app.get('/countries', async function (req, res) {
 
 const EPG_COUNTRY_CODES = { 'italy': 'it', 'united kingdom': 'gb' };
 const epgMapCache = new Map();
-function normalizeEpgName(value) { return normalize(value).replace(/[^a-z0-9]+/g, ' ').trim(); }
+function normalizeEpgName(value) {
+    return normalize(value)
+        .replace(/\s*\.\s*[cs]\s*$/i, '')
+        .replace(/\s+(?:hd|fhd|uhd|4k)\s*$/i, '')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
 async function getEpgMap(country) {
     const cc = EPG_COUNTRY_CODES[normalize(country)];
     if (!cc) return {};
@@ -723,8 +730,9 @@ app.get('/channels.m3u8', async function (req, res) {
         const output = ['#EXTM3U'];
 
         for (const channel of channels) {
-            const epgId = epgMap[normalizeEpgName(channel.name)] || channel.name;
-            output.push(`#EXTINF:-1 tvg-name="${channel.name}" group-title="${channel.country}" tvg-logo="${channel.logo}" tvg-id="${epgId}",${channel.name}`);
+            const cleanName = String(channel.name || '').replace(/\s*\.\s*[cs]\s*$/i, '').trim();
+            const epgId = epgMap[normalizeEpgName(channel.name)] || epgMap[normalizeEpgName(cleanName)] || '';
+            output.push(`#EXTINF:-1 tvg-name="${cleanName}" group-title="${channel.country}" tvg-logo="${channel.logo}" tvg-id="${epgId}",${cleanName}`);
             output.push('#EXTVLCOPT:http-user-agent=VAVOO/2.6');
             output.push('#EXTVLCOPT:no-ssl-verify');
             output.push(`${req.protocol}://${req.headers.host}/stream/${encodeURIComponent(channel.id)}`);
