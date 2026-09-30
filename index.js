@@ -691,14 +691,40 @@ app.get('/countries', async function (req, res) {
     }
 });
 
+const EPG_COUNTRY_CODES = { 'italy': 'it', 'united kingdom': 'gb' };
+const epgMapCache = new Map();
+function normalizeEpgName(value) { return normalize(value).replace(/[^a-z0-9]+/g, ' ').trim(); }
+async function getEpgMap(country) {
+    const cc = EPG_COUNTRY_CODES[normalize(country)];
+    if (!cc) return {};
+    if (epgMapCache.has(cc)) return epgMapCache.get(cc);
+    const url = `https://raw.githubusercontent.com/OwnerPlugins/vavoo/main/epg-channel-db/vavoo_channels_${cc}.json`;
+    const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
+    if (!response.ok) throw new Error(`EPG mapping HTTP ${response.status}`);
+    const raw = await response.json();
+    const map = {};
+    for (const [name, id] of Object.entries(raw)) map[normalizeEpgName(name)] = id;
+    epgMapCache.set(cc, map);
+    return map;
+}
+
+app.get('/epg/:country.xml', function (req, res) {
+    const raw = normalize(req.params.country);
+    const cc = raw === 'uk' ? 'gb' : (raw === 'italy' ? 'it' : raw);
+    if (!['it', 'gb'].includes(cc)) return res.status(404).send('EPG country not configured');
+    res.redirect(302, `https://raw.githubusercontent.com/Belfagor2005/vavoo-player/master/epg_${cc}.xml`);
+});
+
 app.get('/channels.m3u8', async function (req, res) {
     try {
         const country = req.query.country;
         const channels = country ? await getChannelsByCountry(country) : await getChannels();
+        const epgMap = country ? await getEpgMap(country) : {};
         const output = ['#EXTM3U'];
 
         for (const channel of channels) {
-            output.push(`#EXTINF:-1 tvg-name="${channel.name}" group-title="${channel.country}" tvg-logo="${channel.logo}" tvg-id="${channel.name}",${channel.name}`);
+            const epgId = epgMap[normalizeEpgName(channel.name)] || channel.name;
+            output.push(`#EXTINF:-1 tvg-name="${channel.name}" group-title="${channel.country}" tvg-logo="${channel.logo}" tvg-id="${epgId}",${channel.name}`);
             output.push('#EXTVLCOPT:http-user-agent=VAVOO/2.6');
             output.push('#EXTVLCOPT:no-ssl-verify');
             output.push(`${req.protocol}://${req.headers.host}/stream/${encodeURIComponent(channel.id)}`);
