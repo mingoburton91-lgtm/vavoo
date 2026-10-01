@@ -513,23 +513,39 @@ async function getChannels(forceRefresh = false) {
 
     const signature = await getAddonSignature();
 
+    const merged = new Map();
+    let successfulSources = 0;
+
     for (const baseUrl of baseSites) {
         try {
             const channels = await loadCatalogFromBase(baseUrl, signature);
-            cache.set(CHANNELS_CACHE_KEY, channels, 300);
-            lastLoadedChannels = channels;
+            successfulSources += 1;
+            for (const channel of channels) {
+                if (!merged.has(channel.id)) {
+                    merged.set(channel.id, channel);
+                }
+            }
             console.log(`[vavoo] channels loaded from ${baseUrl}: ${channels.length}`);
-            const italyNames = channels.filter(ch => normalize(ch.country) === 'italy').map(ch => String(ch.name || '').trim()).filter(Boolean);
-            console.log('[ITALY_CHANNEL_NAMES_BEGIN]');
-            italyNames.forEach(name => console.log(`[ITALY_CHANNEL] ${name}`));
-            console.log(`[ITALY_CHANNEL_NAMES_END] count=${italyNames.length}`);
-            return channels;
         } catch (error) {
             console.log(`[vavoo] catalog load failed for ${baseUrl}: ${error.message}`);
         }
     }
 
-    throw new Error('Unable to load channel catalog');
+    if (!successfulSources) {
+        throw new Error('Unable to load channel catalog');
+    }
+
+    const channels = [...merged.values()];
+    cache.set(CHANNELS_CACHE_KEY, channels, 300);
+    lastLoadedChannels = channels;
+    const countryCounts = channels.reduce((counts, channel) => {
+        const country = channel.country || 'default';
+        counts[country] = (counts[country] || 0) + 1;
+        return counts;
+    }, {});
+    console.log(`[vavoo] merged catalog: ${channels.length} channels from ${successfulSources} source(s)`);
+    console.log(`[vavoo] countries: ${JSON.stringify(countryCounts)}`);
+    return channels;
 }
 
 async function getChannelsByCountry(country) {
