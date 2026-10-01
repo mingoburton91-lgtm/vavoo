@@ -750,12 +750,21 @@ app.get('/channels.txt', async function (req, res) {
             if (/document|discovery|history|focus|national geographic|nat geo/.test(n)) return 5000;
             return 9000;
         };
-        const seen = new Set();
-        const names = channels.map(ch => clean(ch.name)).filter(name => {
-            const k = normalizeEpgName(name);
-            if (!k || seen.has(k)) return false;
-            seen.add(k); return true;
-        }).sort((a,b) => rank(a)-rank(b) || a.localeCompare(b, 'it', {numeric:true}));
+        const displayName = value => {
+            const raw = String(value || '').trim();
+            const suffix = raw.match(/\s*\.\s*([cs])\s*$/i);
+            const base = clean(raw);
+            return suffix ? `${base} [${suffix[1].toUpperCase()}]` : base;
+        };
+        const names = channels.map(ch => ({
+            raw: String(ch.name || ''),
+            base: clean(ch.name),
+            display: displayName(ch.name)
+        })).filter(x => x.base).sort((a,b) =>
+            rank(a.base)-rank(b.base) ||
+            a.base.localeCompare(b.base, 'it', {numeric:true}) ||
+            a.display.localeCompare(b.display, 'it', {numeric:true})
+        ).map(x => x.display);
         res.type('text/plain; charset=utf-8').send(names.join('\n') + '\n');
     } catch (error) {
         res.status(500).type('text/plain').send(error.message);
