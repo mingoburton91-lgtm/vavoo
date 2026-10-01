@@ -843,6 +843,26 @@ function channelVariantName(value) {
     return suffix ? `${base} [${suffix[1].toUpperCase()}]` : base;
 }
 
+function loadCombinedWhitelist() {
+    const lines = fs.readFileSync(require('node:path').join(__dirname, 'combined-whitelist.txt'), 'utf8')
+        .split(/\r?\n/)
+        .map(x => x.trim())
+        .filter(x => x && !x.startsWith('#'));
+    const italy = [];
+    const foreign = new Map();
+    for (const line of lines) {
+        const separator = line.indexOf('|');
+        if (separator === -1) {
+            italy.push(line);
+            continue;
+        }
+        const country = line.slice(0, separator).trim();
+        const name = line.slice(separator + 1).trim();
+        if (country && name) foreign.set(`${normalize(country)}|${normalize(name)}`, { country, name });
+    }
+    return { italy, foreign };
+}
+
 function loadItalyWhitelist() {
     return fs.readFileSync(require('node:path').join(__dirname, 'italy-whitelist.txt'), 'utf8')
         .split(/\r?\n/)
@@ -881,21 +901,24 @@ app.get('/italia-test.m3u8', async function (req, res) {
     }
 });
 
-// Combined test playlist: definitive filtered Italy + every non-Italian channel from the full catalog.
+// Combined test playlist: definitive filtered Italy + approved SPORT MONDO whitelist.
 app.get('/lista-test.m3u8', async function (req, res) {
     try {
-        const whitelist = loadItalyWhitelist();
-        const wanted = new Map(whitelist.map((name, index) => [normalize(name), index]));
+        const { italy, foreign } = loadCombinedWhitelist();
+        const italyWanted = new Map(italy.map((name, index) => [normalize(name), index]));
         const allChannels = await getChannels();
         const italyEpgMap = await getEpgMap('Italy');
 
         const italySelected = allChannels
             .filter(channel => normalize(channel.country) === 'italy')
             .map(channel => ({ channel, display: channelVariantName(channel.name) }))
-            .filter(item => wanted.has(normalize(item.display)))
-            .sort((a, b) => wanted.get(normalize(a.display)) - wanted.get(normalize(b.display)));
+            .filter(item => italyWanted.has(normalize(item.display)))
+            .sort((a, b) => italyWanted.get(normalize(a.display)) - italyWanted.get(normalize(b.display)));
 
-        const foreignChannels = allChannels.filter(channel => normalize(channel.country) !== 'italy');
+        const foreignSelected = allChannels
+            .map(channel => ({ channel, cleanName: String(channel.name || '').replace(/\s*\.\s*[cs]\s*$/i, '').trim() }))
+            .filter(item => foreign.has(`${normalize(item.channel.country)}|${normalize(item.cleanName)}`));
+
         const output = ['#EXTM3U'];
 
         for (const { channel, display } of italySelected) {
@@ -907,14 +930,14 @@ app.get('/lista-test.m3u8', async function (req, res) {
             output.push(`${req.protocol}://${req.headers.host}/stream/${encodeURIComponent(channel.id)}`);
         }
 
-        for (const channel of foreignChannels) {
-            const cleanName = String(channel.name || '').replace(/\s*\.\s*[cs]\s*$/i, '').trim();
+        for (const { channel, cleanName } of foreignSelected) {
             output.push(`#EXTINF:-1 tvg-name="${cleanName}" group-title="${channel.country}" tvg-logo="${channel.logo}" tvg-id="",${cleanName}`);
             output.push('#EXTVLCOPT:http-user-agent=VAVOO/2.6');
             output.push('#EXTVLCOPT:no-ssl-verify');
             output.push(`${req.protocol}://${req.headers.host}/stream/${encodeURIComponent(channel.id)}`);
         }
 
+        console.log(`[vavoo] lista-test selected Italy=${italySelected.length} SPORT_MONDO=${foreignSelected.length}`);
         setPlaylistHeaders(res);
         res.send(output.join('\n'));
     } catch (error) {
