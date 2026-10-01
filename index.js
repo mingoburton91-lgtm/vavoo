@@ -793,8 +793,42 @@ function extractXmlTvBody(xml) {
 
 app.get('/epg.xml', async function (req, res) {
     try {
-        const channelMap = new Map();
-        const programmes = [];
+        const { italy, foreign } = loadCombinedWhitelist();
+        const wantedIds = new Set();
+
+        const italyMap = await getEpgMap('Italy');
+        for (const name of italy) {
+            const cleanName = String(name || '').replace(/\\s*\\[[CS]\\]\\s*$/i, '').trim();
+            const id = italyMap[normalizeEpgName(cleanName)];
+            if (id) wantedIds.add(id);
+        }
+
+        const foreignByCountry = new Map();
+        for (const item of foreign.values()) {
+            const key = normalize(item.country);
+            if (!foreignByCountry.has(key)) foreignByCountry.set(key, []);
+            foreignByCountry.get(key).push(item.name);
+        }
+        for (const [country, names] of foreignByCountry) {
+            try {
+                const epgMap = await getEpgMap(country);
+                for (const name of names) {
+                    const id = epgMap[normalizeEpgName(name)];
+                    if (id) wantedIds.add(id);
+                }
+            } catch (error) {
+                console.log(`[vavoo] lightweight EPG map unavailable for ${country}: ${error.message}`);
+            }
+        }
+
+        if (!wantedIds.size) throw new Error('No EPG ids matched the playlist whitelist');
+
+        res.type('application/xml; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=900');
+        res.write('<?xml version="1.0" encoding="UTF-8"?>\\n<tv>\\n');
+
+        let keptChannels = 0;
+        let keptProgrammes = 0;
         const loaded = [];
         const failed = [];
 
@@ -804,11 +838,21 @@ app.get('/epg.xml', async function (req, res) {
                 const response = await fetch(url, { signal: AbortSignal.timeout(20000) });
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const body = extractXmlTvBody(await response.text());
+
                 for (const channelXml of body.channels) {
                     const id = channelXml.match(/<channel\\s+id="([^"]+)"/i)?.[1];
-                    if (id && !channelMap.has(id)) channelMap.set(id, channelXml);
+                    if (id && wantedIds.has(id)) {
+                        res.write(channelXml + '\\n');
+                        keptChannels += 1;
+                    }
                 }
-                programmes.push(...body.programmes);
+                for (const programmeXml of body.programmes) {
+                    const id = programmeXml.match(/channel="([^"]+)"/i)?.[1];
+                    if (id && wantedIds.has(id)) {
+                        res.write(programmeXml + '\\n');
+                        keptProgrammes += 1;
+                    }
+                }
                 loaded.push(cc);
             } catch (error) {
                 failed.push(`${cc}:${error.message}`);
@@ -816,13 +860,12 @@ app.get('/epg.xml', async function (req, res) {
         }
 
         if (!loaded.length) throw new Error('No EPG sources available');
-        console.log(`[vavoo] combined EPG loaded=${loaded.join(',')} failed=${failed.join(',') || 'none'} channels=${channelMap.size} programmes=${programmes.length}`);
-        res.type('application/xml; charset=utf-8');
-        res.setHeader('Cache-Control', 'public, max-age=900');
-        res.send(['<?xml version="1.0" encoding="UTF-8"?>','<tv>', ...channelMap.values(), ...programmes, '</tv>'].join('\\n'));
+        res.end('</tv>\\n');
+        console.log(`[vavoo] lightweight EPG wanted=${wantedIds.size} loaded=${loaded.join(',')} failed=${failed.join(',') || 'none'} channels=${keptChannels} programmes=${keptProgrammes}`);
     } catch (error) {
         console.log('[vavoo] epg.xml error', error.message);
-        res.status(502).send(error.message);
+        if (!res.headersSent) res.status(502).send(error.message);
+        else res.end();
     }
 });
 
