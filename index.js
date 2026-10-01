@@ -882,7 +882,7 @@ function compactEpgName(value) {
 }
 
 function epgSourceUrl(source, extension) {
-    return \`https://epgshare01.online/epgshare01/epg_ripper_\${source}1.\${extension}\`;
+    return `https://epgshare01.online/epgshare01/epg_ripper_${source}1.${extension}`;
 }
 
 function epgIdNameVariants(id, cfg) {
@@ -892,7 +892,82 @@ function epgIdNameVariants(id, cfg) {
     while (changed) {
         changed = false;
         for (const suffix of suffixes) {
-            const re = new RegExp(\`\\\\.\${suffix}$\`, 'i');
+            const re = new RegExp(`\\.${suffix}const EPG_COUNTRY_CONFIG = {
+    'italy': { cc: 'it', source: 'IT' },
+    'united kingdom': { cc: 'gb', source: 'UK' },
+    'uk': { cc: 'gb', source: 'UK' },
+    'germany': { cc: 'de', source: 'DE' },
+    'france': { cc: 'fr', source: 'FR' },
+    'netherlands': { cc: 'nl', source: 'NL' },
+    'romania': { cc: 'ro', source: 'RO' },
+    'portugal': { cc: 'pt', source: 'PT' },
+    'bulgaria': { cc: 'bg', source: 'BG' },
+    'poland': { cc: 'pl', source: 'PL' },
+    'turkey': { cc: 'tr', source: 'TR' },
+    'albania': { cc: 'al', source: 'AL' },
+    'croatia': { cc: 'hr', source: 'HR' },
+    'serbia': { cc: 'rs', source: 'RS' },
+    'austria': { cc: 'at', source: 'AT' },
+    'switzerland': { cc: 'ch', source: 'CH' }
+};
+const EPG_COUNTRY_CODES = Object.fromEntries(Object.entries(EPG_COUNTRY_CONFIG).map(([country, cfg]) => [country, cfg.cc]));
+const EPG_CONFIG_BY_SOURCE = new Map(Object.values(EPG_COUNTRY_CONFIG).map(cfg => [cfg.source, cfg]));
+const epgMapCache = new Map();
+const filteredEpgCache = new Map();
+let combinedEpgCache = { xml: '', expiresAt: 0, promise: null, stats: null };
+
+const EPG_ALIASES = {
+    IT: {
+        'tgcom 24': 'TGCom.it',
+        'sky super tennis': 'SuperTennis.HD.it',
+        'discovery focus': 'Focus.it',
+        'discovery giallo': 'Giallo.TV.it',
+        'discovery k2': 'K2.it',
+        'discovery nove': 'Nove.it',
+        'mediaset 20': '20.it',
+        'mediaset extra': 'Mediaset.Extra.it',
+        'mediaset iris': 'Iris.it',
+        'mediaset italia 2': 'Italia.2.it',
+        'radio freccia': 'RADIOFRECCIA.HD.it'
+    }
+};
+
+function getEpgCountryConfig(country) {
+    const key = normalize(country);
+    if (EPG_COUNTRY_CONFIG[key]) return EPG_COUNTRY_CONFIG[key];
+    const upper = String(country || '').trim().toUpperCase();
+    return EPG_CONFIG_BY_SOURCE.get(upper) || null;
+}
+
+function normalizeEpgName(value) {
+    return normalize(value)
+        .replace(/\s*\.\s*[cs]\s*$/i, '')
+        .replace(/\s*[\[(](?:backup|live during events only)[^\])]*[\])]\s*/gi, ' ')
+        .replace(/\b(?:hd|fhd|uhd|4k)\b/gi, ' ')
+        .replace(/\bsports\b/gi, 'sport')
+        .replace(/\bmoto\s+gp\b/gi, 'motogp')
+        .replace(/\btg\s+com\b/gi, 'tgcom')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function compactEpgName(value) {
+    return normalizeEpgName(value).replace(/\s+/g, '');
+}
+
+function epgSourceUrl(source, extension) {
+    return `https://epgshare01.online/epgshare01/epg_ripper_${source}1.${extension}`;
+}
+
+function epgIdNameVariants(id, cfg) {
+    let base = String(id || '').trim();
+    const suffixes = [cfg.source.toLowerCase(), cfg.cc.toLowerCase()];
+    let changed = true;
+    while (changed) {
+        changed = false;
+        for (const suffix of suffixes) {
+            const re = , 'i');
             if (re.test(base)) {
                 base = base.replace(re, '');
                 changed = true;
@@ -916,7 +991,7 @@ async function getEpgMap(country) {
 
     const url = epgSourceUrl(cfg.source, 'txt');
     const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
-    if (!response.ok) throw new Error(\`EPGShare \${cfg.source} index HTTP \${response.status}\`);
+    if (!response.ok) throw new Error(`EPGShare ${cfg.source} index HTTP ${response.status}`);
 
     const textBody = await response.text();
     const ids = textBody
@@ -985,7 +1060,7 @@ async function getWantedEpgIdsBySource() {
     }));
 
     stats.sort((a, b) => a.source.localeCompare(b.source));
-    console.log('[vavoo] EPG matching ' + stats.map(s => \`\${s.source}=\${s.matched}/\${s.total}\`).join(' '));
+    console.log('[vavoo] EPG matching ' + stats.map(s => `${s.source}=${s.matched}/${s.total}`).join(' '));
     return { wantedIdsBySource, stats };
 }
 
@@ -1014,7 +1089,7 @@ async function responseToMaybeGunzipStream(response) {
 }
 
 function xmlAttribute(block, attribute) {
-    const match = String(block || '').match(new RegExp(\`\\\\b\${attribute}=(["'])(.*?)\\\\1\`, 'i'));
+    const match = String(block || '').match(new RegExp(`\\b${attribute}=(["'])(.*?)\\1`, 'i'));
     return match ? match[2] : '';
 }
 
@@ -1022,13 +1097,13 @@ async function filterEpgSource(source, wantedIds) {
     if (!wantedIds || !wantedIds.size) return { source, channels: [], programmes: [] };
 
     const wantedHash = crypto.createHash('sha1').update([...wantedIds].sort().join('\n')).digest('hex').slice(0, 12);
-    const cacheKey = \`epg_filtered_\${source}_\${wantedHash}\`;
+    const cacheKey = `epg_filtered_${source}_${wantedHash}`;
     const cached = filteredEpgCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) return cached.data;
 
     const url = epgSourceUrl(source, 'xml.gz');
     const response = await fetch(url, { signal: AbortSignal.timeout(45000) });
-    if (!response.ok) throw new Error(\`EPGShare \${source} XML HTTP \${response.status}\`);
+    if (!response.ok) throw new Error(`EPGShare ${source} XML HTTP ${response.status}`);
 
     const stream = await responseToMaybeGunzipStream(response);
     let pending = '';
@@ -1061,7 +1136,7 @@ async function filterEpgSource(source, wantedIds) {
             const closeTag = type === 'channel' ? '</channel>' : '</programme>';
             const closeIndex = pending.indexOf(closeTag);
             if (closeIndex < 0) {
-                if (pending.length > 5 * 1024 * 1024) throw new Error(\`EPGShare \${source} XML block too large\`);
+                if (pending.length > 5 * 1024 * 1024) throw new Error(`EPGShare ${source} XML block too large`);
                 break;
             }
 
@@ -1095,7 +1170,7 @@ async function buildCombinedEpgXml() {
             try {
                 return await filterEpgSource(source, ids);
             } catch (error) {
-                failed.push(\`\${source}:\${error.message}\`);
+                failed.push(`${source}:${error.message}`);
                 return null;
             }
         }));
@@ -1121,7 +1196,7 @@ async function buildCombinedEpgXml() {
         programmes: programmes.length,
         bytes: Buffer.byteLength(xml)
     };
-    console.log(\`[vavoo] EPG built sources=\${summary.sources.join(',')} failed=\${failed.join(',') || 'none'} channels=\${summary.channels} programmes=\${summary.programmes} bytes=\${summary.bytes}\`);
+    console.log(`[vavoo] EPG built sources=${summary.sources.join(',')} failed=${failed.join(',') || 'none'} channels=${summary.channels} programmes=${summary.programmes} bytes=${summary.bytes}`);
     return { xml, summary };
 }
 
