@@ -627,16 +627,9 @@ async function resolveStreamUrl(channel) {
     const preferredKey = `resolve_base_${channel.id}`;
     const preferredBase = cache.get(preferredKey);
 
-    let rawCandidates = Array.isArray(channel.candidates) && channel.candidates.length
-        ? [...channel.candidates]
+    const rawCandidates = Array.isArray(channel.candidates) && channel.candidates.length
+        ? channel.candidates
         : baseSites.map(sourceBase => ({ sourceBase, url: channel.url }));
-
-    // Temporary A/B test: the primary candidate for SKY CINEMA UNO .s
-    // returns valid HLS/TS responses but the player remains stuck loading.
-    // Try the second catalog candidate first without changing other channels.
-    if (normalize(channel.country) === 'italy' && normalize(channel.name) === 'sky cinema uno .s' && rawCandidates.length > 1) {
-        rawCandidates = [rawCandidates[1], rawCandidates[0], ...rawCandidates.slice(2)];
-    }
 
     const orderedCandidates = preferredBase
         ? [
