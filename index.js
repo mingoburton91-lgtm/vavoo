@@ -786,7 +786,7 @@ const EPG_XML_COUNTRIES = ['it','gb','de','fr','nl','ro','pt','bg','pl','tr','al
 
 function extractXmlTvBody(xml) {
     const text = String(xml || '');
-    const channels = text.split('</channel>').slice(0, -1).map(part => { const matches = [...part.matchAll(/<channel(?=\\s|>)/gi)]; const start = matches.length ? matches[matches.length - 1].index : -1; return start >= 0 ? part.slice(start) + '</channel>' : ''; }).filter(Boolean);
+    const channels = text.split('</channel>').slice(0, -1).map(part => { const matches = [...part.matchAll(/<channel(?=\s|>)/gi)]; const start = matches.length ? matches[matches.length - 1].index : -1; return start >= 0 ? part.slice(start) + '</channel>' : ''; }).filter(Boolean);
     const programmes = text.split('</programme>').slice(0, -1).map(part => { const start = part.lastIndexOf('<programme'); return start >= 0 ? part.slice(start) + '</programme>' : ''; }).filter(Boolean);
     return { channels, programmes };
 }
@@ -798,7 +798,7 @@ app.get('/epg.xml', async function (req, res) {
 
         const italyMap = await getEpgMap('Italy');
         for (const name of italy) {
-            const cleanName = String(name || '').replace(/\\s*\\[[CS]\\]\\s*$/i, '').trim();
+            const cleanName = String(name || '').replace(/\s*\[[CS]\]\s*$/i, '').trim();
             const id = italyMap[normalizeEpgName(cleanName)];
             if (id) wantedIds.add(id);
         }
@@ -827,7 +827,7 @@ app.get('/epg.xml', async function (req, res) {
 
         res.type('application/xml; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=900');
-        res.write('<?xml version="1.0" encoding="UTF-8"?>\\n<tv>\\n');
+        res.write('<?xml version="1.0" encoding="UTF-8"?>\n<tv>\n');
 
         let keptChannels = 0;
         let keptProgrammes = 0;
@@ -844,16 +844,16 @@ app.get('/epg.xml', async function (req, res) {
                 const body = extractXmlTvBody(await response.text());
 
                 for (const channelXml of body.channels) {
-                    const id = channelXml.match(/<channel\\s+id="([^"]+)"/i)?.[1];
+                    const id = channelXml.match(/<channel\s+id="([^"]+)"/i)?.[1];
                     if (id && countryWantedIds.has(id)) {
-                        res.write(channelXml + '\\n');
+                        res.write(channelXml + '\n');
                         keptChannels += 1;
                     }
                 }
                 for (const programmeXml of body.programmes) {
                     const id = programmeXml.match(/channel="([^"]+)"/i)?.[1];
                     if (id && countryWantedIds.has(id)) {
-                        res.write(programmeXml + '\\n');
+                        res.write(programmeXml + '\n');
                         keptProgrammes += 1;
                     }
                 }
@@ -864,7 +864,7 @@ app.get('/epg.xml', async function (req, res) {
         }
 
         if (!loaded.length) throw new Error('No EPG sources available');
-        res.end('</tv>\\n');
+        res.end('</tv>\n');
         console.log(`[vavoo] lightweight EPG wanted=${totalWantedIds} loaded=${loaded.join(',')} failed=${failed.join(',') || 'none'} channels=${keptChannels} programmes=${keptProgrammes}`);
     } catch (error) {
         console.log('[vavoo] epg.xml error', error.message);
