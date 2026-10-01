@@ -1,5 +1,6 @@
 const { Command } = require('commander');
 const crypto = require('node:crypto');
+const fs = require('node:fs');
 const express = require('express');
 const { Readable } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
@@ -778,6 +779,51 @@ app.get('/channels.txt', async function (req, res) {
         res.type('text/plain; charset=utf-8').send(names.join('\n') + '\n');
     } catch (error) {
         res.status(500).type('text/plain').send(error.message);
+    }
+});
+
+function channelVariantName(value) {
+    const raw = String(value || '').trim();
+    const suffix = raw.match(/\s*\.\s*([cs])\s*$/i);
+    const base = raw.replace(/\s*\.\s*[cs]\s*$/i, '').trim();
+    return suffix ? `${base} [${suffix[1].toUpperCase()}]` : base;
+}
+
+function loadItalyWhitelist() {
+    return fs.readFileSync(require('node:path').join(__dirname, 'italy-whitelist.txt'), 'utf8')
+        .split(/\r?\n/)
+        .map(x => x.trim())
+        .filter(Boolean);
+}
+
+// Test playlist: same existing catalog/streams, filtered only by the definitive Italy whitelist.
+app.get('/italia-test.m3u8', async function (req, res) {
+    try {
+        const whitelist = loadItalyWhitelist();
+        const wanted = new Map(whitelist.map((name, index) => [normalize(name), index]));
+        const channels = await getChannelsByCountry('Italy');
+        const epgMap = await getEpgMap('Italy');
+
+        const selected = channels
+            .map(channel => ({ channel, display: channelVariantName(channel.name) }))
+            .filter(item => wanted.has(normalize(item.display)))
+            .sort((a, b) => wanted.get(normalize(a.display)) - wanted.get(normalize(b.display)));
+
+        const output = ['#EXTM3U'];
+        for (const { channel, display } of selected) {
+            const cleanName = String(channel.name || '').replace(/\s*\.\s*[cs]\s*$/i, '').trim();
+            const epgId = epgMap[normalizeEpgName(channel.name)] || epgMap[normalizeEpgName(cleanName)] || '';
+            output.push(`#EXTINF:-1 tvg-name="${cleanName}" group-title="Italy" tvg-logo="${channel.logo}" tvg-id="${epgId}",${display}`);
+            output.push('#EXTVLCOPT:http-user-agent=VAVOO/2.6');
+            output.push('#EXTVLCOPT:no-ssl-verify');
+            output.push(`${req.protocol}://${req.headers.host}/stream/${encodeURIComponent(channel.id)}`);
+        }
+
+        setPlaylistHeaders(res);
+        res.send(output.join('\n'));
+    } catch (error) {
+        console.log('[vavoo] italia-test.m3u8 error', error.message);
+        res.status(500).send(error.message);
     }
 });
 
