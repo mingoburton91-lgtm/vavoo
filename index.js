@@ -496,6 +496,8 @@ async function loadCatalogFromBase(baseUrl, signature) {
     return channels;
 }
 
+let lastLoadedChannels = [];
+
 async function getChannels(forceRefresh = false) {
     if (forceRefresh) {
         cache.del(CHANNELS_CACHE_KEY);
@@ -512,6 +514,7 @@ async function getChannels(forceRefresh = false) {
         try {
             const channels = await loadCatalogFromBase(baseUrl, signature);
             cache.set(CHANNELS_CACHE_KEY, channels, 300);
+            lastLoadedChannels = channels;
             console.log(`[vavoo] channels loaded from ${baseUrl}: ${channels.length}`);
             return channels;
         } catch (error) {
@@ -727,7 +730,10 @@ app.get('/epg/:country.xml', function (req, res) {
 app.get('/channels.txt', async function (req, res) {
     try {
         const country = String(req.query.country || 'Italy');
-        const channels = (await getChannels()).filter(ch => normalize(ch.country) === normalize(country));
+        let catalog = lastLoadedChannels;
+        if (!catalog.length) catalog = cache.get(CHANNELS_CACHE_KEY) || [];
+        if (!catalog.length) catalog = await getChannels();
+        const channels = catalog.filter(ch => normalize(ch.country) === normalize(country));
         const clean = name => String(name || '').replace(/\s*\.\s*[cs]\s*$/i, '').trim();
         const rank = name => {
             const n = normalizeEpgName(clean(name));
