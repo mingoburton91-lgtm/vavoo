@@ -786,8 +786,8 @@ const EPG_XML_COUNTRIES = ['it','gb','de','fr','nl','ro','pt','bg','pl','tr','al
 
 function extractXmlTvBody(xml) {
     const text = String(xml || '');
-    const channels = [...text.matchAll(/<channel\\b[\\s\\S]*?<\\/channel>/gi)].map(m => m[0]);
-    const programmes = [...text.matchAll(/<programme\\b[\\s\\S]*?<\\/programme>/gi)].map(m => m[0]);
+    const channels = text.split('</channel>').slice(0, -1).map(part => { const start = part.lastIndexOf('<channel'); return start >= 0 ? part.slice(start) + '</channel>' : ''; }).filter(Boolean);
+    const programmes = text.split('</programme>').slice(0, -1).map(part => { const start = part.lastIndexOf('<programme'); return start >= 0 ? part.slice(start) + '</programme>' : ''; }).filter(Boolean);
     return { channels, programmes };
 }
 
