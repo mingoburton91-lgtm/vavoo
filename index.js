@@ -500,19 +500,10 @@ async function loadCatalogFromBase(baseUrl, signature) {
 }
 
 let lastLoadedChannels = [];
+let channelsLoadPromise = null;
 
-async function getChannels(forceRefresh = false) {
-    if (forceRefresh) {
-        cache.del(CHANNELS_CACHE_KEY);
-    }
-
-    const cached = cache.get(CHANNELS_CACHE_KEY);
-    if (cached) {
-        return cached;
-    }
-
+async function loadChannelsFresh() {
     const signature = await getAddonSignature();
-
     const merged = new Map();
     let successfulSources = 0;
 
@@ -536,7 +527,7 @@ async function getChannels(forceRefresh = false) {
     }
 
     const channels = [...merged.values()];
-    cache.set(CHANNELS_CACHE_KEY, channels, 300);
+    cache.set(CHANNELS_CACHE_KEY, channels, 3600);
     lastLoadedChannels = channels;
     const countryCounts = channels.reduce((counts, channel) => {
         const country = channel.country || 'default';
@@ -546,6 +537,36 @@ async function getChannels(forceRefresh = false) {
     console.log(`[vavoo] merged catalog: ${channels.length} channels from ${successfulSources} source(s)`);
     console.log(`[vavoo] countries: ${JSON.stringify(countryCounts)}`);
     return channels;
+}
+
+function loadChannelsOnce() {
+    if (!channelsLoadPromise) {
+        channelsLoadPromise = loadChannelsFresh().finally(() => {
+            channelsLoadPromise = null;
+        });
+    }
+    return channelsLoadPromise;
+}
+
+async function getChannels(forceRefresh = false) {
+    if (forceRefresh) {
+        cache.del(CHANNELS_CACHE_KEY);
+        return loadChannelsOnce();
+    }
+
+    const cached = cache.get(CHANNELS_CACHE_KEY);
+    if (cached) {
+        return cached;
+    }
+
+    if (lastLoadedChannels.length) {
+        loadChannelsOnce().catch(error => {
+            console.log(`[vavoo] background catalog refresh failed: ${error.message}`);
+        });
+        return lastLoadedChannels;
+    }
+
+    return loadChannelsOnce();
 }
 
 async function getChannelsByCountry(country) {
@@ -1142,4 +1163,7 @@ app.listen(port, httpHost, () => {
     console.log(`M3U: ${baseUrl}/channels.m3u8`);
     console.log(`Example filtered M3U: ${baseUrl}/channels.m3u8?country=Germany`);
     console.log(`Countries: ${baseUrl}/countries`);
+    loadChannelsOnce()
+        .then(channels => console.log(`[vavoo] startup catalog ready: ${channels.length} channels`))
+        .catch(error => console.log(`[vavoo] startup catalog warmup failed: ${error.message}`));
 });
