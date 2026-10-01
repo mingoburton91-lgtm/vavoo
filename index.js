@@ -443,7 +443,7 @@ async function getAddonSignature() {
     throw new Error('Unable to obtain addonSig');
 }
 
-function mapCatalogItem(item) {
+function mapCatalogItem(item, sourceBase) {
     const name = item.name || 'Unknown Channel';
     const country = extractCountry(item.group);
 
@@ -453,7 +453,8 @@ function mapCatalogItem(item) {
         name,
         logo: item.logo || '',
         group: item.group || '',
-        country
+        country,
+        sourceBase
     };
 }
 
@@ -485,7 +486,7 @@ async function loadCatalogFromBase(baseUrl, signature) {
         const items = Array.isArray(body?.items) ? body.items : [];
         for (const item of items) {
             if (item?.type === 'iptv' && item?.url) {
-                channels.push(mapCatalogItem(item));
+                channels.push(mapCatalogItem(item, baseUrl));
             }
         }
 
@@ -513,7 +514,19 @@ async function loadChannelsFresh() {
             successfulSources += 1;
             for (const channel of channels) {
                 if (!merged.has(channel.id)) {
-                    merged.set(channel.id, channel);
+                    merged.set(channel.id, {
+                        ...channel,
+                        candidates: [{ url: channel.url, sourceBase: channel.sourceBase }]
+                    });
+                    continue;
+                }
+
+                const existing = merged.get(channel.id);
+                const duplicate = existing.candidates.some(candidate =>
+                    candidate.url === channel.url && candidate.sourceBase === channel.sourceBase
+                );
+                if (!duplicate) {
+                    existing.candidates.push({ url: channel.url, sourceBase: channel.sourceBase });
                 }
             }
             console.log(`[vavoo] channels loaded from ${baseUrl}: ${channels.length}`);
@@ -527,6 +540,19 @@ async function loadChannelsFresh() {
     }
 
     const channels = [...merged.values()];
+
+    for (const channel of channels) {
+        if (normalize(channel.country) === 'italy' && normalize(channel.name).includes('sky cinema uno')) {
+            const candidates = Array.isArray(channel.candidates) ? channel.candidates : [];
+            const summary = candidates.map((candidate, index) => ({
+                index,
+                source: candidate.sourceBase,
+                urlHash: crypto.createHash('sha1').update(String(candidate.url)).digest('hex').slice(0, 10)
+            }));
+            console.log(`[vavoo] diagnostic "${channel.name}" candidates=${JSON.stringify(summary)}`);
+        }
+    }
+
     cache.set(CHANNELS_CACHE_KEY, channels, 3600);
     lastLoadedChannels = channels;
     const countryCounts = channels.reduce((counts, channel) => {
