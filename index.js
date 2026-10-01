@@ -900,7 +900,7 @@ app.get('/lista-test.m3u8', async function (req, res) {
         }
 
         setPlaylistHeaders(res);
-        res.send(output.join('\\n'));
+        res.send(output.join('\n'));
     } catch (error) {
         console.log('[vavoo] lista-test.m3u8 error', error.message);
         res.status(500).send(error.message);
