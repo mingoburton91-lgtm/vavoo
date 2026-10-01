@@ -1,6 +1,8 @@
 const { Command } = require('commander');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
+const http = require('node:http');
+const https = require('node:https');
 const express = require('express');
 const { Readable } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
@@ -639,51 +641,87 @@ async function proxyStream(req, res, streamUrl, channelName) {
     }
 }
 
-async function proxyUpstreamUrl(req, res, upstreamUrl) {
+function proxyHlsRequest(req, res, upstreamUrl) {
     const connId = `${req.socket.remoteAddress}`;
-    const controller = new AbortController();
     const upstreamLabel = describeUpstreamUrl(upstreamUrl);
+    const parsed = new URL(upstreamUrl);
+    const transport = parsed.protocol === 'https:' ? https : http;
+    let settled = false;
 
-    req.socket.on('close', function () {
-        controller.abort();
+    const upstreamReq = transport.request(parsed, {
+        method: 'GET',
+        headers: getStreamHeaders(req),
+        timeout: 30000
+    }, upstream => {
+        const status = upstream.statusCode || 502;
+        const contentType = upstream.headers['content-type'] || '';
+
+        if (status < 200 || status >= 300) {
+            upstream.resume();
+            if (!res.headersSent) res.status(status).send(`upstream returned HTTP ${status}`);
+            settled = true;
+            return;
+        }
+
+        if (isM3u8Response(upstreamUrl, contentType)) {
+            const chunks = [];
+            upstream.on('data', chunk => chunks.push(chunk));
+            upstream.on('end', () => {
+                if (settled || res.destroyed) return;
+                const playlist = Buffer.concat(chunks).toString('utf8');
+                const rewrittenPlaylist = rewriteM3u8Playlist(req, upstreamUrl, playlist);
+                const debugInfo = getPlaylistDebugInfo(playlist);
+                console.log(`[${connId}] hls playlist "${upstreamLabel}" status=${status} sequence=${debugInfo.sequence} entries=${debugInfo.segments}`);
+                setPlaylistHeaders(res);
+                res.send(rewrittenPlaylist);
+                settled = true;
+            });
+            upstream.on('error', error => {
+                console.log(`[${connId}] hls playlist error "${upstreamLabel}": ${error.message}`);
+                if (!res.headersSent) res.status(502).send('upstream playlist error');
+                settled = true;
+            });
+            return;
+        }
+
+        // Stream binary HLS assets directly with Node's native HTTP streams.
+        // This intentionally avoids fetch()/Undici, whose parser assertion was
+        // terminating the whole Node process during repeated LG webOS requests.
+        for (const [key, value] of Object.entries(upstream.headers)) {
+            if (value !== undefined && !['connection','transfer-encoding','content-length'].includes(key.toLowerCase())) {
+                try { res.setHeader(key, value); } catch (_) {}
+            }
+        }
+        res.status(status);
+        console.log(`[${connId}] hls asset "${upstreamLabel}" status=${status} type="${contentType || 'unknown'}"`);
+        upstream.pipe(res);
+        upstream.on('end', () => { settled = true; });
+        upstream.on('error', error => {
+            console.log(`[${connId}] hls asset error "${upstreamLabel}": ${error.message}`);
+            if (!res.headersSent) res.status(502).send('upstream asset error');
+            else res.destroy();
+            settled = true;
+        });
     });
 
-    try {
-        const upstream = await fetch(upstreamUrl, {
-            signal: controller.signal,
-            headers: getStreamHeaders(req)
-        });
-
-        if (!upstream.ok || !upstream.body) {
-            throw new Error(`upstream returned HTTP ${upstream.status}`);
-        }
-
-        const contentType = upstream.headers.get('content-type');
-        if (isM3u8Response(upstreamUrl, contentType)) {
-            const playlist = await upstream.text();
-            const rewrittenPlaylist = rewriteM3u8Playlist(req, upstreamUrl, playlist);
-            const debugInfo = getPlaylistDebugInfo(playlist);
-            console.log(`[${connId}] hls playlist "${upstreamLabel}" status=${upstream.status} sequence=${debugInfo.sequence} entries=${debugInfo.segments}`);
-            setPlaylistHeaders(res);
-            res.send(rewrittenPlaylist);
-            return;
-        }
-
-        setUpstreamHeaders(res, upstream);
-        res.status(upstream.status);
-        console.log(`[${connId}] hls asset "${upstreamLabel}" status=${upstream.status} type="${contentType || 'unknown'}"`);
-        await pipeline(Readable.fromWeb(upstream.body), res);
-    } catch (error) {
-        if (controller.signal.aborted) {
-            console.log(`[${connId}] hls proxy ended "${upstreamLabel}"`);
-            return;
-        }
-
+    upstreamReq.on('timeout', () => upstreamReq.destroy(new Error('upstream timeout')));
+    upstreamReq.on('error', error => {
+        if (settled || res.destroyed) return;
         console.log(`[${connId}] hls proxy error "${upstreamLabel}": ${error.message}`);
-        if (!res.headersSent) {
-            res.status(400).send(`upstream proxy error: ${error.message}`);
-        }
-    }
+        if (!res.headersSent) res.status(502).send(`upstream proxy error: ${error.message}`);
+        settled = true;
+    });
+
+    const closeUpstream = () => {
+        if (!settled) upstreamReq.destroy();
+    };
+    req.once('aborted', closeUpstream);
+    res.once('close', closeUpstream);
+    upstreamReq.end();
+}
+
+async function proxyUpstreamUrl(req, res, upstreamUrl) {
+    return proxyHlsRequest(req, res, upstreamUrl);
 }
 
 app.get('/', function (req, res) {
