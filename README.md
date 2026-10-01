@@ -10,3 +10,5 @@ Endpoints:
 
 Railway start command:
 node index.js --http-host 0.0.0.0 --http-port $PORT --vavoo-language en --vavoo-region US --vavoo-url-list both
+
+<!-- deploy refresh: lista-test.m3u8 -->
