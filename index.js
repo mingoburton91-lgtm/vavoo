@@ -443,7 +443,7 @@ async function getAddonSignature() {
     throw new Error('Unable to obtain addonSig');
 }
 
-function mapCatalogItem(item) {
+function mapCatalogItem(item, sourceBase) {
     const name = item.name || 'Unknown Channel';
     const country = extractCountry(item.group);
 
@@ -453,7 +453,8 @@ function mapCatalogItem(item) {
         name,
         logo: item.logo || '',
         group: item.group || '',
-        country
+        country,
+        sourceBase
     };
 }
 
@@ -485,7 +486,7 @@ async function loadCatalogFromBase(baseUrl, signature) {
         const items = Array.isArray(body?.items) ? body.items : [];
         for (const item of items) {
             if (item?.type === 'iptv' && item?.url) {
-                channels.push(mapCatalogItem(item));
+                channels.push(mapCatalogItem(item, baseUrl));
             }
         }
 
@@ -598,40 +599,44 @@ function normalizeStreamId(id) {
 
 async function resolveStreamUrl(channel) {
     const signature = await getAddonSignature();
+    const baseUrl = channel.sourceBase || baseSites[0];
 
-    for (const baseUrl of baseSites) {
-        const resolveUrl = `${baseUrl.replace(/\/$/, '')}/mediahubmx-resolve.json`;
-
-        try {
-            const body = await requestJson({
-                method: 'POST',
-                url: resolveUrl,
-                headers: getCatalogHeaders(signature),
-                body: {
-                    language: currentLanguage,
-                    region: currentRegion,
-                    url: channel.url,
-                    clientVersion: '3.0.2'
-                }
-            });
-
-            if (Array.isArray(body) && body[0]?.url) {
-                return body[0].url;
-            }
-
-            if (body?.url) {
-                return body.url;
-            }
-
-            if (body?.streamUrl) {
-                return body.streamUrl;
-            }
-        } catch (error) {
-            console.log(`[vavoo] resolve failed for ${baseUrl}: ${error.message}`);
-        }
+    if (!baseUrl) {
+        throw new Error(`No catalog source available for channel ${channel.name}`);
     }
 
-    throw new Error(`Unable to resolve stream for channel ${channel.name}`);
+    const resolveUrl = `${baseUrl.replace(/\/$/, '')}/mediahubmx-resolve.json`;
+
+    try {
+        const body = await requestJson({
+            method: 'POST',
+            url: resolveUrl,
+            headers: getCatalogHeaders(signature),
+            body: {
+                language: currentLanguage,
+                region: currentRegion,
+                url: channel.url,
+                clientVersion: '3.0.2'
+            }
+        });
+
+        if (Array.isArray(body) && body[0]?.url) {
+            return body[0].url;
+        }
+
+        if (body?.url) {
+            return body.url;
+        }
+
+        if (body?.streamUrl) {
+            return body.streamUrl;
+        }
+
+        throw new Error('resolver returned no stream URL');
+    } catch (error) {
+        console.log(`[vavoo] resolve failed for ${channel.name} on catalog source ${baseUrl}: ${error.message}`);
+        throw new Error(`Unable to resolve stream for channel ${channel.name} from its catalog source`);
+    }
 }
 
 async function proxyStream(req, res, streamUrl, channelName) {
