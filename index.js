@@ -782,6 +782,50 @@ async function getEpgMap(country) {
     return map;
 }
 
+const EPG_XML_COUNTRIES = ['it','gb','de','fr','nl','ro','pt','bg','pl','tr','al','hr','rs','at','ch'];
+
+function extractXmlTvBody(xml) {
+    const text = String(xml || '');
+    const channels = [...text.matchAll(/<channel\\b[\\s\\S]*?<\\/channel>/gi)].map(m => m[0]);
+    const programmes = [...text.matchAll(/<programme\\b[\\s\\S]*?<\\/programme>/gi)].map(m => m[0]);
+    return { channels, programmes };
+}
+
+app.get('/epg.xml', async function (req, res) {
+    try {
+        const channelMap = new Map();
+        const programmes = [];
+        const loaded = [];
+        const failed = [];
+
+        for (const cc of EPG_XML_COUNTRIES) {
+            const url = `https://raw.githubusercontent.com/Belfagor2005/vavoo-player/master/epg_${cc}.xml`;
+            try {
+                const response = await fetch(url, { signal: AbortSignal.timeout(20000) });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const body = extractXmlTvBody(await response.text());
+                for (const channelXml of body.channels) {
+                    const id = channelXml.match(/<channel\\s+id="([^"]+)"/i)?.[1];
+                    if (id && !channelMap.has(id)) channelMap.set(id, channelXml);
+                }
+                programmes.push(...body.programmes);
+                loaded.push(cc);
+            } catch (error) {
+                failed.push(`${cc}:${error.message}`);
+            }
+        }
+
+        if (!loaded.length) throw new Error('No EPG sources available');
+        console.log(`[vavoo] combined EPG loaded=${loaded.join(',')} failed=${failed.join(',') || 'none'} channels=${channelMap.size} programmes=${programmes.length}`);
+        res.type('application/xml; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=900');
+        res.send(['<?xml version="1.0" encoding="UTF-8"?>','<tv>', ...channelMap.values(), ...programmes, '</tv>'].join('\\n'));
+    } catch (error) {
+        console.log('[vavoo] epg.xml error', error.message);
+        res.status(502).send(error.message);
+    }
+});
+
 app.get('/epg/:country.xml', function (req, res) {
     const raw = normalize(req.params.country);
     const cc = raw === 'uk' ? 'gb' : (raw === 'italy' ? 'it' : raw);
