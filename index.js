@@ -1113,9 +1113,19 @@ app.listen(port, httpHost, () => {
     console.log(`M3U: ${baseUrl}/channels.m3u8`);
     console.log(`Example filtered M3U: ${baseUrl}/channels.m3u8?country=Germany`);
     console.log(`Countries: ${baseUrl}/countries`);
-    loadChannelsOnce()
-        .then(channels => console.log(`[vavoo] startup catalog ready: ${channels.length} channels`))
-        .catch(error => console.log(`[vavoo] startup catalog warmup failed: ${error.message}`));
+    async function warmCatalogWithRetry(attempt = 1) {
+        try {
+            const channels = await loadChannelsOnce();
+            console.log(`[vavoo] startup catalog ready: ${channels.length} channels (attempt ${attempt})`);
+            return channels;
+        } catch (error) {
+            console.log(`[vavoo] startup catalog warmup failed attempt ${attempt}: ${error.message}`);
+            if (attempt >= 5) return [];
+            await new Promise(resolve => setTimeout(resolve, 15000));
+            return warmCatalogWithRetry(attempt + 1);
+        }
+    }
+    warmCatalogWithRetry();
     setTimeout(function () {
         try {
             const lists = loadCombinedWhitelist();
