@@ -1,0 +1,114 @@
+United Kingdom|TNT SPORT 1
+United Kingdom|TNT SPORT 2
+United Kingdom|TNT SPORT 3
+United Kingdom|TNT SPORT 4
+United Kingdom|TNT SPORT 5
+Germany|DAZN 1
+Germany|DAZN 2
+Germany|DAZN EVENT 1
+Germany|DAZN EVENT 2
+Germany|DAZN EVENT 3
+Germany|DAZN EVENT 4
+Germany|DAZN EVENT 5
+Germany|DAZN EVENT 6
+Germany|DAZN EVENT 7
+Germany|DAZN EVENT 8
+Germany|DAZN EVENT 9
+Germany|DAZN EVENT 10
+Germany|DAZN EVENT 11
+Germany|DAZN EVENT 12
+Germany|DAZN EVENT 13
+Germany|DAZN EVENT 14
+Germany|DAZN EVENT 15
+Germany|DAZN EVENT 16
+Germany|DAZN EVENT 17
+Germany|DAZN EVENTS
+France|DAZN 1
+France|DAZN 2
+France|DAZN EVENT 1
+France|DAZN EVENT 2
+France|DAZN EVENT 3
+France|DAZN EVENT 4
+France|DAZN EVENT 5
+France|DAZN EVENT 6
+France|DAZN EVENT 7
+France|DAZN EVENT 8
+France|DAZN EVENT 9
+France|DAZN EVENT 10
+France|DAZN EVENT 11
+France|DAZN EVENT 12
+France|DAZN EVENT 13
+France|DAZN EVENT 14
+France|DAZN EVENT 15
+France|DAZN EVENT 16
+France|DAZN EVENT 17
+France|DAZN EVENT 18
+France|DAZN EVENT 19
+France|DAZN EVENT 20
+France|CANAL+ FOOT
+France|CANAL+ SPORT
+France|CANAL+ LIVE 1
+France|CANAL+ LIVE 2
+France|CANAL+ LIVE 3
+France|CANAL+ LIVE 4
+France|CANAL+ LIVE 5
+France|CANAL+ LIVE 6
+France|CANAL+ LIVE 7
+France|CANAL+ LIVE 8
+France|CANAL+ LIVE 9
+France|CANAL+ LIVE 10
+France|CANAL+ LIVE 11
+France|CANAL+ LIVE 12
+Netherlands|ZIGGO SPORT
+Netherlands|ZIGGO SPORT 1
+Netherlands|ZIGGO SPORT 2
+Netherlands|ZIGGO SPORT 3
+Netherlands|ZIGGO SPORT 4
+Netherlands|ZIGGO SPORT 5
+Netherlands|ZIGGO SPORT VOETBAL
+Netherlands|ZIGGO SPORT SELECT
+Netherlands|ZIGGO SPORT EXTRA
+Romania|DIGI SPORT 1
+Romania|DIGI SPORT 2
+Romania|DIGI SPORT 3
+Romania|DIGI SPORT 4
+Romania|PRIMA SPORT 1
+Romania|PRIMA SPORT 2
+Romania|PRIMA SPORT 3
+Portugal|SPORT TV 1
+Portugal|SPORT TV 2
+Portugal|SPORT TV 3
+Portugal|SPORT TV 4
+Portugal|SPORT TV 5
+Portugal|SPORT TV 6
+Portugal|SPORT TV 7
+Portugal|DAZN 1
+Portugal|DAZN 2
+Portugal|DAZN 3
+Portugal|DAZN 4
+Portugal|DAZN 5
+Bulgaria|MAX SPORT 1
+Bulgaria|MAX SPORT 2
+Bulgaria|MAX SPORT 3
+Bulgaria|MAX SPORT 4
+Poland|ELEVEN SPORTS 1
+Poland|ELEVEN SPORTS 2
+Poland|ELEVEN SPORTS 3
+Poland|ELEVEN SPORTS 4
+Poland|CANAL+ SPORT
+Poland|CANAL+ EXTRA
+Poland|POLSAT SPORT
+Poland|POLSAT SPORT PREMIUM
+Turkey|S SPORT
+Turkey|S SPORT 2
+Turkey|TRT SPOR
+Albania|ARENA SPORT 1
+Albania|ARENA SPORT 2
+Albania|ARENA SPORT 3
+Albania|ARENA SPORT 4
+Albania|ARENA SPORT 5
+Croatia|ARENA SPORT
+Serbia|ARENA SPORT
+Austria|SKY SPORT
+Germany|SKY SPORT
+Switzerland|SKY SPORT
