@@ -619,7 +619,9 @@ async function findChannelById(id) {
  * Example: `123|User-Agent=VAVOO/2.6` -> `123`.
  */
 function normalizeStreamId(id) {
-    return String(id || '').split('|')[0];
+    return String(id || '')
+        .split('|')[0]
+        .replace(/\.m3u8$/i, '');
 }
 
 async function resolveStreamUrl(channel) {
@@ -1047,7 +1049,7 @@ app.get('/italia-test.m3u8', async function (req, res) {
             output.push(`#EXTINF:-1 tvg-name="${cleanName}" group-title="Italy" tvg-logo="${channel.logo}" tvg-id="${epgId}",${display}`);
             output.push('#EXTVLCOPT:http-user-agent=VAVOO/2.6');
             output.push('#EXTVLCOPT:no-ssl-verify');
-            output.push(`${req.protocol}://${req.headers.host}/stream/${encodeURIComponent(channel.id)}`);
+            output.push(`${req.protocol}://${req.headers.host}/stream/${encodeURIComponent(channel.id)}.m3u8`);
         }
 
         setPlaylistHeaders(res);
@@ -1090,7 +1092,7 @@ app.get('/lista-test.m3u8', async function (req, res) {
             output.push(`#EXTINF:-1 tvg-name="${cleanName}" group-title="Italy" tvg-logo="${channel.logo}" tvg-id="${epgId}",${display}`);
             output.push('#EXTVLCOPT:http-user-agent=VAVOO/2.6');
             output.push('#EXTVLCOPT:no-ssl-verify');
-            output.push(`${req.protocol}://${req.headers.host}/stream/${encodeURIComponent(channel.id)}`);
+            output.push(`${req.protocol}://${req.headers.host}/stream/${encodeURIComponent(channel.id)}.m3u8`);
         }
 
         for (const { channel, cleanName } of foreignSelected) {
@@ -1099,7 +1101,7 @@ app.get('/lista-test.m3u8', async function (req, res) {
             output.push(`#EXTINF:-1 tvg-name="${cleanName}" group-title="${channel.country}" tvg-logo="${channel.logo}" tvg-id="${epgId}",${cleanName}`);
             output.push('#EXTVLCOPT:http-user-agent=VAVOO/2.6');
             output.push('#EXTVLCOPT:no-ssl-verify');
-            output.push(`${req.protocol}://${req.headers.host}/stream/${encodeURIComponent(channel.id)}`);
+            output.push(`${req.protocol}://${req.headers.host}/stream/${encodeURIComponent(channel.id)}.m3u8`);
         }
 
         console.log(`[vavoo] lista-test selected Italy=${italySelected.length} SPORT_MONDO=${foreignSelected.length}`);
@@ -1124,7 +1126,7 @@ app.get('/channels.m3u8', async function (req, res) {
             output.push(`#EXTINF:-1 tvg-name="${cleanName}" group-title="${channel.country}" tvg-logo="${channel.logo}" tvg-id="${epgId}",${cleanName}`);
             output.push('#EXTVLCOPT:http-user-agent=VAVOO/2.6');
             output.push('#EXTVLCOPT:no-ssl-verify');
-            output.push(`${req.protocol}://${req.headers.host}/stream/${encodeURIComponent(channel.id)}`);
+            output.push(`${req.protocol}://${req.headers.host}/stream/${encodeURIComponent(channel.id)}.m3u8`);
         }
 
         setPlaylistHeaders(res);
