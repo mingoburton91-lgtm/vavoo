@@ -865,6 +865,48 @@ app.get('/italia-test.m3u8', async function (req, res) {
     }
 });
 
+// Combined test playlist: definitive filtered Italy + every non-Italian channel from the full catalog.
+app.get('/lista-test.m3u8', async function (req, res) {
+    try {
+        const whitelist = loadItalyWhitelist();
+        const wanted = new Map(whitelist.map((name, index) => [normalize(name), index]));
+        const allChannels = await getChannels();
+        const italyEpgMap = await getEpgMap('Italy');
+
+        const italySelected = allChannels
+            .filter(channel => normalize(channel.country) === 'italy')
+            .map(channel => ({ channel, display: channelVariantName(channel.name) }))
+            .filter(item => wanted.has(normalize(item.display)))
+            .sort((a, b) => wanted.get(normalize(a.display)) - wanted.get(normalize(b.display)));
+
+        const foreignChannels = allChannels.filter(channel => normalize(channel.country) !== 'italy');
+        const output = ['#EXTM3U'];
+
+        for (const { channel, display } of italySelected) {
+            const cleanName = String(channel.name || '').replace(/\s*\.\s*[cs]\s*$/i, '').trim();
+            const epgId = italyEpgMap[normalizeEpgName(channel.name)] || italyEpgMap[normalizeEpgName(cleanName)] || '';
+            output.push(`#EXTINF:-1 tvg-name="${cleanName}" group-title="Italy" tvg-logo="${channel.logo}" tvg-id="${epgId}",${display}`);
+            output.push('#EXTVLCOPT:http-user-agent=VAVOO/2.6');
+            output.push('#EXTVLCOPT:no-ssl-verify');
+            output.push(`${req.protocol}://${req.headers.host}/stream/${encodeURIComponent(channel.id)}`);
+        }
+
+        for (const channel of foreignChannels) {
+            const cleanName = String(channel.name || '').replace(/\s*\.\s*[cs]\s*$/i, '').trim();
+            output.push(`#EXTINF:-1 tvg-name="${cleanName}" group-title="${channel.country}" tvg-logo="${channel.logo}" tvg-id="",${cleanName}`);
+            output.push('#EXTVLCOPT:http-user-agent=VAVOO/2.6');
+            output.push('#EXTVLCOPT:no-ssl-verify');
+            output.push(`${req.protocol}://${req.headers.host}/stream/${encodeURIComponent(channel.id)}`);
+        }
+
+        setPlaylistHeaders(res);
+        res.send(output.join('\\n'));
+    } catch (error) {
+        console.log('[vavoo] lista-test.m3u8 error', error.message);
+        res.status(500).send(error.message);
+    }
+});
+
 app.get('/channels.m3u8', async function (req, res) {
     try {
         const country = req.query.country;
