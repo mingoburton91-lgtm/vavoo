@@ -722,6 +722,46 @@ app.get('/epg/:country.xml', function (req, res) {
     res.redirect(302, `https://raw.githubusercontent.com/Belfagor2005/vavoo-player/master/epg_${cc}.xml`);
 });
 
+
+// Editable channel-name list, ordered roughly like Italian TV/satellite lineups.
+app.get('/channels.txt', async function (req, res) {
+    try {
+        const country = String(req.query.country || 'Italy');
+        const channels = (await getChannels()).filter(ch => normalize(ch.country) === normalize(country));
+        const clean = name => String(name || '').replace(/\s*\.\s*[cs]\s*$/i, '').trim();
+        const rank = name => {
+            const n = normalizeEpgName(clean(name));
+            const exact = [
+                ['rai 1',1],['rai 2',2],['rai 3',3],['rete 4',4],['canale 5',5],['italia 1',6],
+                ['la7',7],['tv8',8],['nove',9],['20 mediaset',20],['rai 4',21],['iris',22],
+                ['rai 5',23],['rai movie',24],['rai premium',25],['cielo',26],['27 twentyseven',27],
+                ['tv2000',28],['la7d',29],['la5',30],['real time',31],['qvc',32],['food network',33],
+                ['cine34',34],['focus',35],['rtl 102 5',36],['warner tv',37],['giallo',38],
+                ['top crime',39],['boing',40],['k2',41],['rai gulp',42],['rai yoyo',43],
+                ['frisbee',44],['cartoonito',46],['super',47],['rai news 24',48],['italia 2',49],
+                ['sky tg24',50]
+            ];
+            for (const [key,val] of exact) if (n === key || n.startsWith(key + ' ')) return val;
+            if (/sky.*cinema|cinema.*sky/.test(n)) return 1000;
+            if (/cinema|movie|film/.test(n)) return 1100;
+            if (/sky.*sport|sport|dazn|eurosport/.test(n)) return 2000;
+            if (/news|tg24|tgcom|rainews/.test(n)) return 3000;
+            if (/cartoon|boing|gulp|yoyo|frisbee|nick|disney|super/.test(n)) return 4000;
+            if (/document|discovery|history|focus|national geographic|nat geo/.test(n)) return 5000;
+            return 9000;
+        };
+        const seen = new Set();
+        const names = channels.map(ch => clean(ch.name)).filter(name => {
+            const k = normalizeEpgName(name);
+            if (!k || seen.has(k)) return false;
+            seen.add(k); return true;
+        }).sort((a,b) => rank(a)-rank(b) || a.localeCompare(b, 'it', {numeric:true}));
+        res.type('text/plain; charset=utf-8').send(names.join('\n') + '\n');
+    } catch (error) {
+        res.status(500).type('text/plain').send(error.message);
+    }
+});
+
 app.get('/channels.m3u8', async function (req, res) {
     try {
         const country = req.query.country;
