@@ -1184,8 +1184,8 @@ app.get('/stream/:id', async function (req, res) {
         }
 
         if (isM3u8Url(streamUrl)) {
-            console.log(`[${connId}] hls master playlist "${channel.name}"`);
-            sendHlsMasterPlaylist(req, res, streamUrl);
+            console.log(`[${connId}] hls playlist proxy "${channel.name}"`);
+            await proxyUpstreamUrl(req, res, streamUrl);
             return;
         }
 
