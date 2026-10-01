@@ -443,7 +443,7 @@ async function getAddonSignature() {
     throw new Error('Unable to obtain addonSig');
 }
 
-function mapCatalogItem(item, sourceBase) {
+function mapCatalogItem(item) {
     const name = item.name || 'Unknown Channel';
     const country = extractCountry(item.group);
 
@@ -453,8 +453,7 @@ function mapCatalogItem(item, sourceBase) {
         name,
         logo: item.logo || '',
         group: item.group || '',
-        country,
-        sourceBase
+        country
     };
 }
 
@@ -486,7 +485,7 @@ async function loadCatalogFromBase(baseUrl, signature) {
         const items = Array.isArray(body?.items) ? body.items : [];
         for (const item of items) {
             if (item?.type === 'iptv' && item?.url) {
-                channels.push(mapCatalogItem(item, baseUrl));
+                channels.push(mapCatalogItem(item));
             }
         }
 
@@ -599,44 +598,45 @@ function normalizeStreamId(id) {
 
 async function resolveStreamUrl(channel) {
     const signature = await getAddonSignature();
-    const baseUrl = channel.sourceBase || baseSites[0];
+    const preferredKey = `resolve_base_${channel.id}`;
+    const preferredBase = cache.get(preferredKey);
+    const orderedBases = preferredBase
+        ? [preferredBase, ...baseSites.filter(baseUrl => baseUrl !== preferredBase)]
+        : [...baseSites];
 
-    if (!baseUrl) {
-        throw new Error(`No catalog source available for channel ${channel.name}`);
-    }
+    for (const baseUrl of orderedBases) {
+        const resolveUrl = `${baseUrl.replace(/\/$/, '')}/mediahubmx-resolve.json`;
 
-    const resolveUrl = `${baseUrl.replace(/\/$/, '')}/mediahubmx-resolve.json`;
+        try {
+            const body = await requestJson({
+                method: 'POST',
+                url: resolveUrl,
+                headers: getCatalogHeaders(signature),
+                body: {
+                    language: currentLanguage,
+                    region: currentRegion,
+                    url: channel.url,
+                    clientVersion: '3.0.2'
+                },
+                timeout: 7000
+            });
 
-    try {
-        const body = await requestJson({
-            method: 'POST',
-            url: resolveUrl,
-            headers: getCatalogHeaders(signature),
-            body: {
-                language: currentLanguage,
-                region: currentRegion,
-                url: channel.url,
-                clientVersion: '3.0.2'
+            const streamUrl = Array.isArray(body) && body[0]?.url
+                ? body[0].url
+                : (body?.url || body?.streamUrl);
+
+            if (streamUrl) {
+                cache.set(preferredKey, baseUrl, 900);
+                return streamUrl;
             }
-        });
 
-        if (Array.isArray(body) && body[0]?.url) {
-            return body[0].url;
+            console.log(`[vavoo] resolve returned no stream URL for ${channel.name} on ${baseUrl}`);
+        } catch (error) {
+            console.log(`[vavoo] resolve failed for ${channel.name} on ${baseUrl}: ${error.message}`);
         }
-
-        if (body?.url) {
-            return body.url;
-        }
-
-        if (body?.streamUrl) {
-            return body.streamUrl;
-        }
-
-        throw new Error('resolver returned no stream URL');
-    } catch (error) {
-        console.log(`[vavoo] resolve failed for ${channel.name} on catalog source ${baseUrl}: ${error.message}`);
-        throw new Error(`Unable to resolve stream for channel ${channel.name} from its catalog source`);
     }
+
+    throw new Error(`Unable to resolve stream for channel ${channel.name}`);
 }
 
 async function proxyStream(req, res, streamUrl, channelName) {
