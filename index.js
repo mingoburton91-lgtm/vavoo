@@ -6,6 +6,7 @@ const https = require('node:https');
 const express = require('express');
 const { Readable } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
+const { createEpgService } = require('./epg');
 
 const NodeCache = require('node-cache');
 
@@ -816,131 +817,36 @@ app.get('/countries', async function (req, res) {
     }
 });
 
-const EPG_COUNTRY_CODES = {
-    'italy': 'it', 'united kingdom': 'gb', 'germany': 'de', 'france': 'fr',
-    'netherlands': 'nl', 'romania': 'ro', 'portugal': 'pt', 'bulgaria': 'bg',
-    'poland': 'pl', 'turkey': 'tr', 'albania': 'al', 'croatia': 'hr',
-    'serbia': 'rs', 'austria': 'at', 'switzerland': 'ch'
-};
-const epgMapCache = new Map();
-function normalizeEpgName(value) {
-    return normalize(value)
-        .replace(/\s*\.\s*[cs]\s*$/i, '')
-        .replace(/\s+(?:hd|fhd|uhd|4k)\s*$/i, '')
-        .replace(/[^a-z0-9]+/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-}
+const epgService = createEpgService();
+const EPG_COUNTRY_CODES = epgService.countryCodes;
+
 async function getEpgMap(country) {
-    const cc = EPG_COUNTRY_CODES[normalize(country)];
-    if (!cc) return {};
-    if (epgMapCache.has(cc)) return epgMapCache.get(cc);
-    const url = `https://raw.githubusercontent.com/OwnerPlugins/vavoo/main/epg-channel-db/vavoo_channels_${cc}.json`;
-    const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
-    if (!response.ok) throw new Error(`EPG mapping HTTP ${response.status}`);
-    const raw = await response.json();
-    const map = {};
-    for (const [name, id] of Object.entries(raw)) map[normalizeEpgName(name)] = id;
-    epgMapCache.set(cc, map);
-    return map;
+    return epgService.getMap(country);
 }
 
-const EPG_XML_COUNTRIES = ['it','gb','de','fr','nl','ro','pt','bg','pl','tr','al','hr','rs','at','ch'];
-
-function extractXmlTvBody(xml) {
-    const text = String(xml || '');
-    const channels = text.split('</channel>').slice(0, -1).map(part => { const matches = [...part.matchAll(/<channel(?=\s|>)/gi)]; const start = matches.length ? matches[matches.length - 1].index : -1; return start >= 0 ? part.slice(start) + '</channel>' : ''; }).filter(Boolean);
-    const programmes = text.split('</programme>').slice(0, -1).map(part => { const start = part.lastIndexOf('<programme'); return start >= 0 ? part.slice(start) + '</programme>' : ''; }).filter(Boolean);
-    return { channels, programmes };
+function lookupEpgId(epgMap, name, country) {
+    return epgService.lookupId(epgMap, name, country);
 }
 
 app.get('/epg.xml', async function (req, res) {
     try {
         const { italy, foreign } = loadCombinedWhitelist();
-        const wantedIds = new Set();
-
-        const italyMap = await getEpgMap('Italy');
-        for (const name of italy) {
-            const cleanName = String(name || '').replace(/\s*\[[CS]\]\s*$/i, '').trim();
-            const id = italyMap[normalizeEpgName(cleanName)];
-            if (id) wantedIds.add(id);
-        }
-
-        const foreignByCountry = new Map();
-        for (const item of foreign.values()) {
-            const key = normalize(item.country);
-            if (!foreignByCountry.has(key)) foreignByCountry.set(key, []);
-            foreignByCountry.get(key).push(item.name);
-        }
-        for (const [country, names] of foreignByCountry) {
-            try {
-                const epgMap = await getEpgMap(country);
-                const cc = EPG_COUNTRY_CODES[country];
-                for (const name of names) {
-                    const id = epgMap[normalizeEpgName(name)];
-                    if (id) addWantedId(cc, id);
-                }
-            } catch (error) {
-                console.log(`[vavoo] lightweight EPG map unavailable for ${country}: ${error.message}`);
-            }
-        }
-
-        const totalWantedIds = [...wantedIdsByCountry.values()].reduce((sum, ids) => sum + ids.size, 0);
-        if (!totalWantedIds) throw new Error('No EPG ids matched the playlist whitelist');
-
+        const result = await epgService.getCombinedXml(italy, foreign);
         res.type('application/xml; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=900');
-        res.write('<?xml version="1.0" encoding="UTF-8"?>\n<tv>\n');
-
-        let keptChannels = 0;
-        let keptProgrammes = 0;
-        const loaded = [];
-        const failed = [];
-
-        for (const cc of EPG_XML_COUNTRIES) {
-            const countryWantedIds = wantedIdsByCountry.get(cc);
-            if (!countryWantedIds || !countryWantedIds.size) continue;
-            const url = `https://raw.githubusercontent.com/Belfagor2005/vavoo-player/master/epg_${cc}.xml`;
-            try {
-                const response = await fetch(url, { signal: AbortSignal.timeout(20000) });
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                const body = extractXmlTvBody(await response.text());
-
-                for (const channelXml of body.channels) {
-                    const id = channelXml.match(/<channel\s+id="([^"]+)"/i)?.[1];
-                    if (id && countryWantedIds.has(id)) {
-                        res.write(channelXml + '\n');
-                        keptChannels += 1;
-                    }
-                }
-                for (const programmeXml of body.programmes) {
-                    const id = programmeXml.match(/channel="([^"]+)"/i)?.[1];
-                    if (id && countryWantedIds.has(id)) {
-                        res.write(programmeXml + '\n');
-                        keptProgrammes += 1;
-                    }
-                }
-                loaded.push(cc);
-            } catch (error) {
-                failed.push(`${cc}:${error.message}`);
-            }
-        }
-
-        if (!loaded.length) throw new Error('No EPG sources available');
-        res.end('</tv>\n');
-        console.log(`[vavoo] lightweight EPG wanted=${totalWantedIds} loaded=${loaded.join(',')} failed=${failed.join(',') || 'none'} channels=${keptChannels} programmes=${keptProgrammes}`);
+        res.setHeader('X-EPG-Channels', String(result.summary.channels || 0));
+        res.setHeader('X-EPG-Programmes', String(result.summary.programmes || 0));
+        res.send(result.xml);
     } catch (error) {
         console.log('[vavoo] epg.xml error', error.message);
-        if (!res.headersSent) res.status(502).send(error.message);
-        else res.end();
+        res.status(502).send(error.message);
     }
 });
 
 app.get('/epg/:country.xml', function (req, res) {
-    const raw = normalize(req.params.country);
-    const cc = raw === 'uk' ? 'gb' : (raw === 'italy' ? 'it' : raw);
-    if (!['it', 'gb'].includes(cc)) return res.status(404).send('EPG country not configured');
-    res.redirect(302, `https://raw.githubusercontent.com/Belfagor2005/vavoo-player/master/epg_${cc}.xml`);
+    const url = epgService.countrySourceUrl(req.params.country);
+    if (!url) return res.status(404).send('EPG country not configured');
+    res.redirect(302, url);
 });
 
 
@@ -1042,10 +948,11 @@ app.get('/italia-test.m3u8', async function (req, res) {
             .filter(item => wanted.has(normalize(item.display)))
             .sort((a, b) => wanted.get(normalize(a.display)) - wanted.get(normalize(b.display)));
 
-        const output = ['#EXTM3U'];
+        const epgUrl = String(req.headers['x-forwarded-proto'] || req.protocol).split(',')[0] + '://' + req.headers.host + '/epg.xml';
+        const output = ['#EXTM3U x-tvg-url="' + epgUrl + '" url-tvg="' + epgUrl + '"'];
         for (const { channel, display } of selected) {
             const cleanName = String(channel.name || '').replace(/\s*\.\s*[cs]\s*$/i, '').trim();
-            const epgId = epgMap[normalizeEpgName(channel.name)] || epgMap[normalizeEpgName(cleanName)] || '';
+            const epgId = lookupEpgId(epgMap, channel.name, channel.country) || lookupEpgId(epgMap, cleanName, channel.country) || '';
             output.push(`#EXTINF:-1 tvg-name="${cleanName}" group-title="Italy" tvg-logo="${channel.logo}" tvg-id="${epgId}",${display}`);
             output.push('#EXTVLCOPT:http-user-agent=VAVOO/2.6');
             output.push('#EXTVLCOPT:no-ssl-verify');
@@ -1084,11 +991,12 @@ app.get('/lista-test.m3u8', async function (req, res) {
             .map(channel => ({ channel, cleanName: String(channel.name || '').replace(/\s*\.\s*[cs]\s*$/i, '').trim() }))
             .filter(item => foreign.has(`${normalize(item.channel.country)}|${normalize(item.cleanName)}`));
 
-        const output = ['#EXTM3U'];
+        const epgUrl = String(req.headers['x-forwarded-proto'] || req.protocol).split(',')[0] + '://' + req.headers.host + '/epg.xml';
+        const output = ['#EXTM3U x-tvg-url="' + epgUrl + '" url-tvg="' + epgUrl + '"'];
 
         for (const { channel, display } of italySelected) {
             const cleanName = String(channel.name || '').replace(/\s*\.\s*[cs]\s*$/i, '').trim();
-            const epgId = italyEpgMap[normalizeEpgName(channel.name)] || italyEpgMap[normalizeEpgName(cleanName)] || '';
+            const epgId = lookupEpgId(italyEpgMap, channel.name, 'Italy') || lookupEpgId(italyEpgMap, cleanName, 'Italy') || '';
             output.push(`#EXTINF:-1 tvg-name="${cleanName}" group-title="Italy" tvg-logo="${channel.logo}" tvg-id="${epgId}",${display}`);
             output.push('#EXTVLCOPT:http-user-agent=VAVOO/2.6');
             output.push('#EXTVLCOPT:no-ssl-verify');
@@ -1097,7 +1005,7 @@ app.get('/lista-test.m3u8', async function (req, res) {
 
         for (const { channel, cleanName } of foreignSelected) {
             const epgMap = foreignEpgMaps.get(normalize(channel.country)) || {};
-            const epgId = epgMap[normalizeEpgName(channel.name)] || epgMap[normalizeEpgName(cleanName)] || '';
+            const epgId = lookupEpgId(epgMap, channel.name, channel.country) || lookupEpgId(epgMap, cleanName, channel.country) || '';
             output.push(`#EXTINF:-1 tvg-name="${cleanName}" group-title="${channel.country}" tvg-logo="${channel.logo}" tvg-id="${epgId}",${cleanName}`);
             output.push('#EXTVLCOPT:http-user-agent=VAVOO/2.6');
             output.push('#EXTVLCOPT:no-ssl-verify');
@@ -1122,7 +1030,7 @@ app.get('/channels.m3u8', async function (req, res) {
 
         for (const channel of channels) {
             const cleanName = String(channel.name || '').replace(/\s*\.\s*[cs]\s*$/i, '').trim();
-            const epgId = epgMap[normalizeEpgName(channel.name)] || epgMap[normalizeEpgName(cleanName)] || '';
+            const epgId = lookupEpgId(epgMap, channel.name, channel.country) || lookupEpgId(epgMap, cleanName, channel.country) || '';
             output.push(`#EXTINF:-1 tvg-name="${cleanName}" group-title="${channel.country}" tvg-logo="${channel.logo}" tvg-id="${epgId}",${cleanName}`);
             output.push('#EXTVLCOPT:http-user-agent=VAVOO/2.6');
             output.push('#EXTVLCOPT:no-ssl-verify');
@@ -1208,4 +1116,18 @@ app.listen(port, httpHost, () => {
     loadChannelsOnce()
         .then(channels => console.log(`[vavoo] startup catalog ready: ${channels.length} channels`))
         .catch(error => console.log(`[vavoo] startup catalog warmup failed: ${error.message}`));
+    setTimeout(function () {
+        try {
+            const lists = loadCombinedWhitelist();
+            epgService.getCombinedXml(lists.italy, lists.foreign)
+                .then(function (result) {
+                    console.log('[vavoo] startup EPG ready: ' + result.summary.channels + ' channels, ' + result.summary.programmes + ' programmes');
+                })
+                .catch(function (error) {
+                    console.log('[vavoo] startup EPG warmup failed: ' + error.message);
+                });
+        } catch (error) {
+            console.log('[vavoo] startup EPG warmup failed: ' + error.message);
+        }
+    }, 5000);
 });
