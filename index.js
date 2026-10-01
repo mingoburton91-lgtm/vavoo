@@ -626,11 +626,20 @@ async function resolveStreamUrl(channel) {
     const signature = await getAddonSignature();
     const preferredKey = `resolve_base_${channel.id}`;
     const preferredBase = cache.get(preferredKey);
-    const orderedBases = preferredBase
-        ? [preferredBase, ...baseSites.filter(baseUrl => baseUrl !== preferredBase)]
-        : [...baseSites];
 
-    for (const baseUrl of orderedBases) {
+    const rawCandidates = Array.isArray(channel.candidates) && channel.candidates.length
+        ? channel.candidates
+        : baseSites.map(sourceBase => ({ sourceBase, url: channel.url }));
+
+    const orderedCandidates = preferredBase
+        ? [
+            ...rawCandidates.filter(candidate => candidate.sourceBase === preferredBase),
+            ...rawCandidates.filter(candidate => candidate.sourceBase !== preferredBase)
+        ]
+        : rawCandidates;
+
+    for (const candidate of orderedCandidates) {
+        const baseUrl = candidate.sourceBase;
         const resolveUrl = `${baseUrl.replace(/\/$/, '')}/mediahubmx-resolve.json`;
 
         try {
@@ -641,7 +650,7 @@ async function resolveStreamUrl(channel) {
                 body: {
                     language: currentLanguage,
                     region: currentRegion,
-                    url: channel.url,
+                    url: candidate.url,
                     clientVersion: '3.0.2'
                 },
                 timeout: 7000
