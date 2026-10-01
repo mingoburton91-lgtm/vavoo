@@ -992,6 +992,7 @@ app.get('/stream/:id', async function (req, res) {
     }
 });
 
+// Railway deploy trigger: lista-test follows the same main-branch deployment flow as italia-test.
 app.listen(port, httpHost, () => {
     const baseUrl = getLocalBaseUrl();
     console.log(`Listening on ${baseUrl}/`);
