@@ -425,3 +425,103 @@ Switzerland|SKY SPORT 1 D
 Switzerland|SKY SPORT 2 D
 Switzerland|SKY SPORT BUNDESLIGA
 Switzerland|SKY SPORT GOLF
+
+# SKY ESTERO aliases/additional catalogue spellings
+United Kingdom|SKY ACTION HD
+United Kingdom|SKY ACTION
+United Kingdom|SKY ADVENTURE HD
+United Kingdom|SKY ADVENTURE
+United Kingdom|SKY ARTS HD
+United Kingdom|SKY ATLANTIC +1
+United Kingdom|SKY ATLANTIC HD
+United Kingdom|SKY CINEMA HITS HD
+United Kingdom|SKY COMEDY HD
+United Kingdom|SKY CRIME +1
+United Kingdom|SKY CRIME HD
+United Kingdom|SKY DOCUMENTARIES HD
+United Kingdom|SKY DRAMA HD
+United Kingdom|SKY FAMILY HD
+United Kingdom|SKY GREATS HD
+United Kingdom|SKY HISTORY +1
+United Kingdom|SKY HISTORY 2 HD
+United Kingdom|SKY HISTORY 2
+United Kingdom|SKY HISTORY HD
+United Kingdom|SKY KIDS HD
+United Kingdom|SKY MEGA HITS HD
+United Kingdom|SKY MIX HD
+United Kingdom|SKY NATURE HD
+United Kingdom|SKY NEWS HD
+United Kingdom|SKY ONE HD
+United Kingdom|SKY PREMIERE +1
+United Kingdom|SKY PREMIERE HD
+United Kingdom|SKY PREMIERE
+United Kingdom|SKY REPLAY
+United Kingdom|SKY SCIFI HORROR HD
+United Kingdom|SKY SCI-FI HD
+United Kingdom|SKY THRILLER HD
+United Kingdom|SKY WITNESS +1
+United Kingdom|SKY WITNESS HD
+United Kingdom|SKY SPORTS ACTION
+United Kingdom|SKY SPORTS ACTION HD
+United Kingdom|SKY SPORTS BOX OFFICE
+United Kingdom|SKY SPORTS CRICKET
+United Kingdom|SKY SPORTS CRICKET HD
+United Kingdom|SKY SPORTS F1
+United Kingdom|SKY SPORTS F1 HD
+United Kingdom|SKY SPORTS FOOTBALL HD
+United Kingdom|SKY SPORTS GOLF
+United Kingdom|SKY SPORTS GOLF HD
+United Kingdom|SKY SPORTS MAIN EVENT
+United Kingdom|SKY SPORTS MAIN EVENT HD
+United Kingdom|SKY SPORTS MIX
+United Kingdom|SKY SPORTS MIX HD
+United Kingdom|SKY SPORTS NEWS
+United Kingdom|SKY SPORTS NEWS HD
+United Kingdom|SKY SPORTS PREMIER LEAGUE
+United Kingdom|SKY SPORTS PREMIER LEAGUE HD
+United Kingdom|SKY SPORTS RACING
+United Kingdom|SKY SPORTS RACING HD
+United Kingdom|SKY SPORTS TENNIS
+United Kingdom|SKY SPORTS TENNIS HD
+United Kingdom|SKY SPORTS +
+United Kingdom|SKY SPORTS + HD
+United Kingdom|SKY SPORTS ULTRA HD 1
+United Kingdom|SKY SPORTS ULTRA HD 2
+United Kingdom|SKYSP ACTION
+United Kingdom|SKYSP ACTIONHD
+United Kingdom|SKYSPBOXOFF
+United Kingdom|SKYSPCRICKET HD
+United Kingdom|SKYSP CRICKET
+United Kingdom|SKYSP F1 HD
+United Kingdom|SKYSP F1
+United Kingdom|SKYSP FBALL HD
+United Kingdom|SKYSP FBALL
+United Kingdom|SKYSP GOLF HD
+United Kingdom|SKYSP GOLF
+United Kingdom|SKYSP+HD
+United Kingdom|SKYSPMAINEVHD
+United Kingdom|SKYSP MIX HD
+United Kingdom|SKYSP NEWS HD
+United Kingdom|SKYSP PL HD
+United Kingdom|SKYSP RACING HD
+United Kingdom|SKYSP RACING
+United Kingdom|SKYSP TENNIS HD
+United Kingdom|SKYSP+
+Germany|SKY CINEMA PREMIERE HD
+Germany|SKY SPORT BUNDESLIGA
+Germany|SKY SPORT BUNDESLIGA UHD
+Germany|SKY SPORT BUNDESLIGA 1
+Germany|SKY SPORT BUNDESLIGA 2
+Germany|SKY SPORT BUNDESLIGA 3
+Germany|SKY SPORT BUNDESLIGA 4
+Germany|SKY SPORT BUNDESLIGA 5
+Germany|SKY SPORT BUNDESLIGA 6
+Germany|SKY SPORT BUNDESLIGA 7
+Germany|SKY SPORT BUNDESLIGA 8
+Germany|SKY SPORT BUNDESLIGA 9
+Germany|SKY SPORT BUNDESLIGA 10
+Germany|SKY SPORT AUSTRIA
+Germany|SKY SPORT AUSTRIA 4
+Germany|SKY SPORT AUSTRIA 5
+Germany|SKY SPORT AUSTRIA 6
+Germany|SKY SPORT AUSTRIA 7
