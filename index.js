@@ -516,6 +516,10 @@ async function getChannels(forceRefresh = false) {
             cache.set(CHANNELS_CACHE_KEY, channels, 300);
             lastLoadedChannels = channels;
             console.log(`[vavoo] channels loaded from ${baseUrl}: ${channels.length}`);
+            const italyNames = channels.filter(ch => normalize(ch.country) === 'italy').map(ch => String(ch.name || '').trim()).filter(Boolean);
+            console.log('[ITALY_CHANNEL_NAMES_BEGIN]');
+            italyNames.forEach(name => console.log(`[ITALY_CHANNEL] ${name}`));
+            console.log(`[ITALY_CHANNEL_NAMES_END] count=${italyNames.length}`);
             return channels;
         } catch (error) {
             console.log(`[vavoo] catalog load failed for ${baseUrl}: ${error.message}`);
