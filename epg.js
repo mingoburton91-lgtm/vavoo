@@ -424,7 +424,7 @@ function createEpgService() {
     }
 
     function lookupId(epgMap, name, country) {
-        if (!epgMap || !name) return '';
+        if (!epgMap || !name || !epgMap.byName || !epgMap.byCompact) return '';
 
         const cfg = getConfig(country) || CONFIG_BY_SOURCE.get(epgMap.source);
         const normal = normalizeName(name);
