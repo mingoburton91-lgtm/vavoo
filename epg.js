@@ -55,6 +55,13 @@ const SOURCE_LANGUAGE = {
     TR: 'tr'
 };
 
+
+const ITALY_GUIDE_SOURCES = [
+    { name: 'raiplay.it', url: 'https://iptv-org.github.io/epg/guides/it/raiplay.it.epg.xml.gz' },
+    { name: 'mediaset.it', url: 'https://iptv-org.github.io/epg/guides/it/mediaset.it.epg.xml.gz' },
+    { name: 'guidatv.sky.it', url: 'https://iptv-org.github.io/epg/guides/it/guidatv.sky.it.epg.xml.gz' }
+];
+
 function decodeXmlText(value) {
     return String(value || '')
         .replace(/&#x([0-9a-f]+);/gi, function (_, hex) { return String.fromCodePoint(parseInt(hex, 16)); })
@@ -544,6 +551,289 @@ function createEpgService() {
         return replayStream;
     }
 
+
+    function xmlDisplayNames(block) {
+        const values = [];
+        const re = /<display-name\b[^>]*>([\s\S]*?)<\/display-name>/gi;
+        let match;
+        while ((match = re.exec(String(block || ''))) !== null) {
+            const value = decodeXmlText(match[1]).replace(/<[^>]+>/g, '').trim();
+            if (value) values.push(value);
+        }
+        return values;
+    }
+
+    function rewriteXmlAttribute(block, attribute, value) {
+        const re = new RegExp("(\\b" + attribute + "\\s*=\\s*)(['\"])(.*?)\\2", 'i');
+        return String(block || '').replace(re, function (_, prefix, quote) {
+            return prefix + quote + String(value || '') + quote;
+        });
+    }
+
+    function buildItalyWantedIndex(wantedIds) {
+        const cfg = CONFIG_BY_SOURCE.get('IT');
+        const byName = new Map();
+        const byCompact = new Map();
+
+        for (const id of wantedIds || []) {
+            for (const variant of idNameVariants(id, cfg)) {
+                const normal = normalizeName(variant);
+                const compact = compactName(variant);
+                if (normal && !byName.has(normal)) byName.set(normal, id);
+                if (compact && !byCompact.has(compact)) byCompact.set(compact, id);
+            }
+        }
+
+        return { byName: byName, byCompact: byCompact };
+    }
+
+    function matchItalyWanted(index, candidates) {
+        for (const candidate of candidates) {
+            const normal = normalizeName(candidate);
+            if (normal && index.byName.has(normal)) {
+                return { id: index.byName.get(normal), score: 100 };
+            }
+        }
+        for (const candidate of candidates) {
+            const compact = compactName(candidate);
+            if (compact && index.byCompact.has(compact)) {
+                return { id: index.byCompact.get(compact), score: 90 };
+            }
+        }
+        return null;
+    }
+
+    async function filterItalyExternalSource(sourceDef, wantedIds, alreadyCovered) {
+        const response = await fetch(sourceDef.url, { signal: AbortSignal.timeout(45000) });
+        if (!response.ok) throw new Error(sourceDef.name + ' HTTP ' + response.status);
+
+        const stream = await responseToMaybeGunzipStream(response);
+        const wantedIndex = buildItalyWantedIndex(wantedIds);
+        let pending = '';
+        let mappingsLocked = false;
+        const bestByTarget = new Map();
+        const sourceToTarget = new Map();
+        const channelByTarget = new Map();
+        const programmesByTarget = new Map();
+
+        function lockMappings() {
+            if (mappingsLocked) return;
+            mappingsLocked = true;
+            for (const [targetId, candidate] of bestByTarget.entries()) {
+                sourceToTarget.set(candidate.sourceId, targetId);
+                channelByTarget.set(targetId, rewriteXmlAttribute(candidate.block, 'id', targetId));
+            }
+        }
+
+        for await (const chunk of stream) {
+            pending += Buffer.from(chunk).toString('utf8');
+
+            while (true) {
+                const channelStart = pending.indexOf('<channel');
+                const programmeStart = pending.indexOf('<programme');
+                let start = -1;
+                let type = '';
+
+                if (channelStart >= 0 && (programmeStart < 0 || channelStart < programmeStart)) {
+                    start = channelStart;
+                    type = 'channel';
+                } else if (programmeStart >= 0) {
+                    start = programmeStart;
+                    type = 'programme';
+                }
+
+                if (start < 0) {
+                    if (pending.length > 1024) pending = pending.slice(-1024);
+                    break;
+                }
+
+                if (start > 0) pending = pending.slice(start);
+
+                const closeTag = type === 'channel' ? '</channel>' : '</programme>';
+                const closeIndex = pending.indexOf(closeTag);
+                if (closeIndex < 0) {
+                    if (pending.length > 5 * 1024 * 1024) {
+                        throw new Error(sourceDef.name + ' XML block too large');
+                    }
+                    break;
+                }
+
+                const block = pending.slice(0, closeIndex + closeTag.length);
+                pending = pending.slice(closeIndex + closeTag.length);
+
+                if (type === 'channel') {
+                    if (mappingsLocked) continue;
+                    const sourceId = xmlAttribute(block, 'id');
+                    if (!sourceId) continue;
+
+                    const candidates = xmlDisplayNames(block);
+                    candidates.push.apply(candidates, idNameVariants(sourceId, CONFIG_BY_SOURCE.get('IT')));
+
+                    const matched = matchItalyWanted(wantedIndex, candidates);
+                    if (!matched || alreadyCovered.has(matched.id)) continue;
+
+                    const previous = bestByTarget.get(matched.id);
+                    if (!previous || matched.score > previous.score) {
+                        bestByTarget.set(matched.id, {
+                            sourceId: sourceId,
+                            block: block,
+                            score: matched.score
+                        });
+                    }
+                    continue;
+                }
+
+                lockMappings();
+                const sourceId = xmlAttribute(block, 'channel');
+                const targetId = sourceToTarget.get(sourceId);
+                if (!targetId) continue;
+
+                if (!programmesByTarget.has(targetId)) programmesByTarget.set(targetId, []);
+                programmesByTarget.get(targetId).push(
+                    rewriteXmlAttribute(block, 'channel', targetId)
+                );
+            }
+        }
+
+        lockMappings();
+
+        const channels = [];
+        const programmes = [];
+        const covered = new Set();
+
+        for (const [targetId, channelBlock] of channelByTarget.entries()) {
+            const targetProgrammes = programmesByTarget.get(targetId) || [];
+            if (!targetProgrammes.length) continue;
+            channels.push(channelBlock);
+            programmes.push.apply(programmes, targetProgrammes);
+            covered.add(targetId);
+        }
+
+        return {
+            source: 'IT:' + sourceDef.name,
+            channels: channels,
+            programmes: programmes,
+            covered: covered
+        };
+    }
+
+    function removePlaceholderItalyProgrammes(result) {
+        const programmesById = new Map();
+        for (const block of result.programmes || []) {
+            const id = xmlAttribute(block, 'channel');
+            if (!programmesById.has(id)) programmesById.set(id, []);
+            programmesById.get(id).push(block);
+        }
+
+        const rejected = new Set();
+        for (const [id, blocks] of programmesById.entries()) {
+            let placeholderCount = 0;
+            let titleCount = 0;
+
+            for (const block of blocks) {
+                const re = /<title\b[^>]*>([\s\S]*?)<\/title>/gi;
+                let match;
+                while ((match = re.exec(block)) !== null) {
+                    titleCount += 1;
+                    const title = decodeXmlText(match[1]).replace(/<[^>]+>/g, '').trim();
+                    if (/^timeshift position$/i.test(title)) placeholderCount += 1;
+                }
+            }
+
+            if (titleCount > 0 && placeholderCount / titleCount >= 0.8) rejected.add(id);
+        }
+
+        if (rejected.size) {
+            console.log('[vavoo] Italy EPG rejected placeholder ids=' + Array.from(rejected).join(','));
+        }
+
+        return {
+            source: result.source,
+            channels: (result.channels || []).filter(function (block) {
+                return !rejected.has(xmlAttribute(block, 'id'));
+            }),
+            programmes: (result.programmes || []).filter(function (block) {
+                return !rejected.has(xmlAttribute(block, 'channel'));
+            })
+        };
+    }
+
+    async function filterItalySource(wantedIds) {
+        if (!wantedIds || !wantedIds.size) {
+            return { source: 'IT', channels: [], programmes: [] };
+        }
+
+        const wantedHash = crypto
+            .createHash('sha1')
+            .update(Array.from(wantedIds).sort().join('\n'))
+            .digest('hex')
+            .slice(0, 12);
+        const cacheKey = 'IT-MERGED:' + wantedHash;
+        const cached = filteredCache.get(cacheKey);
+        if (cached && cached.expiresAt > Date.now()) return cached.data;
+
+        const covered = new Set();
+        const channels = [];
+        const programmes = [];
+        const usedSources = [];
+
+        for (const sourceDef of ITALY_GUIDE_SOURCES) {
+            try {
+                const result = await filterItalyExternalSource(sourceDef, wantedIds, covered);
+                if (result.covered.size) {
+                    usedSources.push(sourceDef.name + ':' + result.covered.size);
+                    channels.push.apply(channels, result.channels);
+                    programmes.push.apply(programmes, result.programmes);
+                    for (const id of result.covered) covered.add(id);
+                }
+            } catch (error) {
+                console.log('[vavoo] Italy EPG source failed ' + sourceDef.name + ': ' + error.message);
+            }
+        }
+
+        const remaining = new Set(Array.from(wantedIds).filter(function (id) {
+            return !covered.has(id);
+        }));
+
+        if (remaining.size) {
+            try {
+                const fallback = removePlaceholderItalyProgrammes(await filterSource('IT', remaining));
+                const fallbackIds = new Set(
+                    fallback.programmes
+                        .map(function (block) { return xmlAttribute(block, 'channel'); })
+                        .filter(Boolean)
+                );
+
+                channels.push.apply(
+                    channels,
+                    fallback.channels.filter(function (block) {
+                        return fallbackIds.has(xmlAttribute(block, 'id'));
+                    })
+                );
+                programmes.push.apply(programmes, fallback.programmes);
+                for (const id of fallbackIds) covered.add(id);
+                if (fallbackIds.size) usedSources.push('epgshare:' + fallbackIds.size);
+            } catch (error) {
+                console.log('[vavoo] Italy EPG fallback failed: ' + error.message);
+            }
+        }
+
+        const data = { source: 'IT', channels: channels, programmes: programmes };
+        filteredCache.set(cacheKey, {
+            expiresAt: Date.now() + 30 * 60 * 1000,
+            data: data
+        });
+
+        console.log(
+            '[vavoo] Italy EPG merged wanted=' + wantedIds.size
+            + ' covered=' + covered.size
+            + ' programmes=' + programmes.length
+            + ' sources=' + (usedSources.join(',') || 'none')
+        );
+
+        return data;
+    }
+
     function xmlAttribute(block, attribute) {
         const match = String(block || '').match(new RegExp("\\b" + attribute + "=(['\"])(.*?)\\1", 'i'));
         return match ? match[2] : '';
@@ -700,7 +990,7 @@ function createEpgService() {
                 const source = entry[0];
                 const ids = entry[1];
                 try {
-                    return await filterSource(source, ids);
+                    return source === 'IT'\n                        ? await filterItalySource(ids)\n                        : await filterSource(source, ids);
                 } catch (error) {
                     failed.push(source + ':' + error.message);
                     return null;
