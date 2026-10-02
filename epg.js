@@ -57,9 +57,9 @@ const SOURCE_LANGUAGE = {
 
 
 const ITALY_GUIDE_SOURCES = [
-    { name: 'raiplay.it', url: 'https://iptv-org.github.io/epg/guides/it/raiplay.it.xml.gz' },
-    { name: 'mediaset.it', url: 'https://iptv-org.github.io/epg/guides/it/mediaset.it.xml.gz' },
-    { name: 'guidatv.sky.it', url: 'https://iptv-org.github.io/epg/guides/it/guidatv.sky.it.xml.gz' }
+    { name: 'guidatv.sky.it', url: 'https://iptv-org.github.io/epg/guides/it/guidatv.sky.it.epg.xml' },
+    { name: 'mediaset.it', url: 'https://iptv-org.github.io/epg/guides/it/mediaset.it.epg.xml' },
+    { name: 'open-epg-italy8', url: 'https://www.open-epg.com/files/italy8.xml.gz' }
 ];
 
 function decodeXmlText(value) {
@@ -830,6 +830,12 @@ function createEpgService() {
             + ' programmes=' + programmes.length
             + ' sources=' + (usedSources.join(',') || 'none')
         );
+        if (covered.size < wantedIds.size) {
+            console.log(
+                '[vavoo] Italy EPG uncovered ids='
+                + Array.from(wantedIds).filter(function (id) { return !covered.has(id); }).join(',')
+            );
+        }
 
         return data;
     }
