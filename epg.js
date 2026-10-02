@@ -990,7 +990,9 @@ function createEpgService() {
                 const source = entry[0];
                 const ids = entry[1];
                 try {
-                    return source === 'IT'\n                        ? await filterItalySource(ids)\n                        : await filterSource(source, ids);
+                    return source === 'IT'
+                        ? await filterItalySource(ids)
+                        : await filterSource(source, ids);
                 } catch (error) {
                     failed.push(source + ':' + error.message);
                     return null;
