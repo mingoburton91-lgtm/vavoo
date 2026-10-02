@@ -497,7 +497,6 @@ async function loadCatalogFromBase(baseUrl, signature) {
 
         cursor = body.nextCursor;
     }
-
     return channels;
 }
 
@@ -991,28 +990,90 @@ app.get('/lista-test.m3u8', async function (req, res) {
             .map(channel => ({ channel, cleanName: String(channel.name || '').replace(/\s*\.\s*[cs]\s*$/i, '').trim() }))
             .filter(item => foreign.has(`${normalize(item.channel.country)}|${normalize(item.cleanName)}`));
 
+        const italyRows = italySelected.map(({ channel, display }) => {
+            const cleanName = String(channel.name || '').replace(/\s*\.\s*[cs]\s*$/i, '').trim();
+            const epgId = lookupEpgId(italyEpgMap, channel.name, 'Italy') || lookupEpgId(italyEpgMap, cleanName, 'Italy') || '';
+            return { channel, display, cleanName, epgId, country: 'Italy' };
+        });
+
+        const foreignRows = foreignSelected.map(({ channel, cleanName }) => {
+            const epgMap = foreignEpgMaps.get(normalize(channel.country)) || {};
+            const epgId = lookupEpgId(epgMap, channel.name, channel.country) || lookupEpgId(epgMap, cleanName, channel.country) || '';
+            return { channel, display: cleanName, cleanName, epgId, country: channel.country };
+        });
+
+        const allRows = italyRows.concat(foreignRows);
+        const siblingLogos = new Map();
+        for (const row of allRows) {
+            if (!row.channel.logo) continue;
+            siblingLogos.set(`${normalize(row.country)}|${normalize(row.cleanName)}`, row.channel.logo);
+        }
+
+        const logoRequests = new Map();
+        for (const row of allRows) {
+            const siblingLogo = siblingLogos.get(`${normalize(row.country)}|${normalize(row.cleanName)}`);
+            if (row.channel.logo || siblingLogo || !row.epgId) continue;
+            const key = normalize(row.country);
+            if (!logoRequests.has(key)) logoRequests.set(key, { country: row.country, ids: new Set() });
+            logoRequests.get(key).ids.add(row.epgId);
+        }
+
+        const epgLogos = new Map();
+        await Promise.all(Array.from(logoRequests.entries()).map(async ([key, request]) => {
+            try {
+                epgLogos.set(key, await epgService.getLogos(request.country, request.ids));
+            } catch (error) {
+                console.log(`[vavoo] EPG logos unavailable for ${request.country}: ${error.message}`);
+            }
+        }));
+
+        let siblingFallbacks = 0;
+        let epgFallbacks = 0;
+        let missingLogos = 0;
+
+        function resolveLogo(row) {
+            if (row.channel.logo) return row.channel.logo;
+
+            const siblingLogo = siblingLogos.get(`${normalize(row.country)}|${normalize(row.cleanName)}`);
+            if (siblingLogo) {
+                siblingFallbacks += 1;
+                return siblingLogo;
+            }
+
+            const countryLogos = epgLogos.get(normalize(row.country));
+            const epgLogo = countryLogos && row.epgId ? countryLogos.get(row.epgId) : '';
+            if (epgLogo) {
+                epgFallbacks += 1;
+                return epgLogo;
+            }
+
+            missingLogos += 1;
+            return '';
+        }
+
         const epgUrl = String(req.headers['x-forwarded-proto'] || req.protocol).split(',')[0] + '://' + req.headers.host + '/epg.xml';
         const output = ['#EXTM3U x-tvg-url="' + epgUrl + '" url-tvg="' + epgUrl + '"'];
 
-        for (const { channel, display } of italySelected) {
-            const cleanName = String(channel.name || '').replace(/\s*\.\s*[cs]\s*$/i, '').trim();
-            const epgId = lookupEpgId(italyEpgMap, channel.name, 'Italy') || lookupEpgId(italyEpgMap, cleanName, 'Italy') || '';
-            output.push(`#EXTINF:-1 tvg-name="${cleanName}" group-title="Italy" tvg-logo="${channel.logo}" tvg-id="${epgId}",${display}`);
+        for (const row of italyRows) {
+            const logo = resolveLogo(row);
+            output.push(`#EXTINF:-1 tvg-name="${row.cleanName}" group-title="Italy" tvg-logo="${logo}" tvg-id="${row.epgId}",${row.display}`);
             output.push('#EXTVLCOPT:http-user-agent=VAVOO/2.6');
             output.push('#EXTVLCOPT:no-ssl-verify');
-            output.push(`${req.protocol}://${req.headers.host}/stream/${encodeURIComponent(channel.id)}.m3u8`);
+            output.push(`${req.protocol}://${req.headers.host}/stream/${encodeURIComponent(row.channel.id)}.m3u8`);
         }
 
-        for (const { channel, cleanName } of foreignSelected) {
-            const epgMap = foreignEpgMaps.get(normalize(channel.country)) || {};
-            const epgId = lookupEpgId(epgMap, channel.name, channel.country) || lookupEpgId(epgMap, cleanName, channel.country) || '';
-            output.push(`#EXTINF:-1 tvg-name="${cleanName}" group-title="${channel.country}" tvg-logo="${channel.logo}" tvg-id="${epgId}",${cleanName}`);
+        for (const row of foreignRows) {
+            const logo = resolveLogo(row);
+            output.push(`#EXTINF:-1 tvg-name="${row.cleanName}" group-title="${row.country}" tvg-logo="${logo}" tvg-id="${row.epgId}",${row.display}`);
             output.push('#EXTVLCOPT:http-user-agent=VAVOO/2.6');
             output.push('#EXTVLCOPT:no-ssl-verify');
-            output.push(`${req.protocol}://${req.headers.host}/stream/${encodeURIComponent(channel.id)}.m3u8`);
+            output.push(`${req.protocol}://${req.headers.host}/stream/${encodeURIComponent(row.channel.id)}.m3u8`);
         }
 
-        console.log(`[vavoo] lista-test selected Italy=${italySelected.length} SPORT_MONDO=${foreignSelected.length}`);
+        console.log(
+            `[vavoo] lista-test selected Italy=${italyRows.length} SPORT_MONDO=${foreignRows.length} `
+            + `logos sibling=${siblingFallbacks} epg=${epgFallbacks} missing=${missingLogos}`
+        );
         setPlaylistHeaders(res);
         res.send(output.join('\n'));
     } catch (error) {
