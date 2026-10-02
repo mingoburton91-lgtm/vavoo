@@ -337,22 +337,34 @@ function createEpgService() {
     }
 
     function startTranslation(results, summary) {
-        if (!translatorBaseUrl || translationPromise) return;
+        if (!translatorBaseUrl) return Promise.resolve(null);
+        if (translationPromise) return translationPromise;
 
         translationPromise = (async function () {
-            const translatedResults = [];
+            const translatedResults = new Array(results.length);
             let translatedSources = 0;
+            let nextIndex = 0;
+            const workerCount = Math.min(3, Math.max(1, results.length));
 
-            for (const result of results) {
-                try {
-                    const translated = await translateResult(result);
-                    translatedResults.push(translated);
-                    if (translated !== result) translatedSources += 1;
-                } catch (error) {
-                    console.log('[vavoo] EPG translation failed for ' + result.source + ': ' + error.message);
-                    translatedResults.push(result);
+            async function worker() {
+                while (true) {
+                    const index = nextIndex;
+                    nextIndex += 1;
+                    if (index >= results.length) return;
+
+                    const result = results[index];
+                    try {
+                        const translated = await translateResult(result);
+                        translatedResults[index] = translated;
+                        if (translated !== result) translatedSources += 1;
+                    } catch (error) {
+                        console.log('[vavoo] EPG translation failed for ' + result.source + ': ' + error.message);
+                        throw error;
+                    }
                 }
             }
+
+            await Promise.all(Array.from({ length: workerCount }, function () { return worker(); }));
 
             const translated = composeXml(translatedResults, Object.assign({}, summary, {
                 translated: true,
@@ -370,11 +382,16 @@ function createEpgService() {
                 + ' cache=' + translationCache.size
                 + ' programmes=' + translated.summary.programmes
             );
+
+            return { xml: translated.xml, summary: translated.summary };
         })().catch(function (error) {
             console.log('[vavoo] EPG translation error: ' + error.message);
+            throw error;
         }).finally(function () {
             translationPromise = null;
         });
+
+        return translationPromise;
     }
 
     async function getMap(country) {
@@ -727,7 +744,7 @@ function createEpgService() {
         if (translatedCache.xml) {
             if (translatedCache.expiresAt <= Date.now() && !combinedCache.promise && !translationPromise) {
                 combinedCache.promise = buildCombinedXml(italy, foreign)
-                    .then(function (result) {
+                    .then(async function (result) {
                         combinedCache = {
                             xml: result.xml,
                             expiresAt: Date.now() + 15 * 60 * 1000,
@@ -735,8 +752,12 @@ function createEpgService() {
                             summary: result.summary,
                             results: result.results
                         };
-                        startTranslation(result.results, result.summary);
-                        return { xml: result.xml, summary: result.summary };
+                        try {
+                            await startTranslation(result.results, result.summary);
+                        } catch (error) {
+                            console.log('[vavoo] EPG background translation failed: ' + error.message);
+                        }
+                        return { xml: translatedCache.xml, summary: translatedCache.summary };
                     })
                     .catch(function (error) {
                         combinedCache.promise = null;
@@ -748,30 +769,44 @@ function createEpgService() {
         }
 
         if (combinedCache.xml && combinedCache.expiresAt > Date.now()) {
-            if (combinedCache.results) startTranslation(combinedCache.results, combinedCache.summary);
-            return { xml: combinedCache.xml, summary: combinedCache.summary };
+            if (!translatorBaseUrl) {
+                return { xml: combinedCache.xml, summary: combinedCache.summary };
+            }
+            if (combinedCache.results) {
+                const translated = await startTranslation(combinedCache.results, combinedCache.summary);
+                if (translated) return translated;
+            }
         }
 
-        if (combinedCache.promise) return combinedCache.promise;
+        if (!combinedCache.promise) {
+            combinedCache.promise = buildCombinedXml(italy, foreign)
+                .then(function (result) {
+                    combinedCache = {
+                        xml: result.xml,
+                        expiresAt: Date.now() + 15 * 60 * 1000,
+                        promise: null,
+                        summary: result.summary,
+                        results: result.results
+                    };
+                    return result;
+                })
+                .catch(function (error) {
+                    combinedCache.promise = null;
+                    throw error;
+                });
+        }
 
-        combinedCache.promise = buildCombinedXml(italy, foreign)
-            .then(function (result) {
-                combinedCache = {
-                    xml: result.xml,
-                    expiresAt: Date.now() + 15 * 60 * 1000,
-                    promise: null,
-                    summary: result.summary,
-                    results: result.results
-                };
-                startTranslation(result.results, result.summary);
-                return { xml: result.xml, summary: result.summary };
-            })
-            .catch(function (error) {
-                combinedCache.promise = null;
-                throw error;
-            });
+        const built = await combinedCache.promise;
 
-        return combinedCache.promise;
+        if (!translatorBaseUrl) {
+            return { xml: built.xml, summary: built.summary };
+        }
+
+        const translated = await startTranslation(built.results, built.summary);
+        if (!translated || !translated.xml) {
+            throw new Error('Translated EPG is not ready');
+        }
+        return translated;
     }
 
     const countryCodes = {};
