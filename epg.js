@@ -41,6 +41,46 @@ const ALIASES = {
     }
 };
 
+const SOURCE_LANGUAGE = {
+    UK: 'en',
+    DE: 'de',
+    AT: 'de',
+    CH: 'de',
+    FR: 'fr',
+    NL: 'nl',
+    RO: 'ro',
+    PT: 'pt',
+    BG: 'bg',
+    PL: 'pl',
+    TR: 'tr'
+};
+
+function decodeXmlText(value) {
+    return String(value || '')
+        .replace(/&#x([0-9a-f]+);/gi, function (_, hex) { return String.fromCodePoint(parseInt(hex, 16)); })
+        .replace(/&#([0-9]+);/g, function (_, dec) { return String.fromCodePoint(parseInt(dec, 10)); })
+        .replace(/&quot;/g, '"')
+        .replace(/&apos;/g, "'")
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&');
+}
+
+function encodeXmlText(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+function forceItalianLang(attrs) {
+    const raw = String(attrs || '');
+    if (/\blang\s*=\s*["'][^"']*["']/i.test(raw)) {
+        return raw.replace(/\blang\s*=\s*["'][^"']*["']/i, 'lang="it"');
+    }
+    return raw + ' lang="it"';
+}
+
 function baseNormalize(value) {
     return String(value || '')
         .normalize('NFD')
@@ -113,7 +153,207 @@ function idNameVariants(id, cfg) {
 function createEpgService() {
     const mapCache = new Map();
     const filteredCache = new Map();
-    let combinedCache = { xml: '', expiresAt: 0, promise: null, summary: null };
+    const translationCache = new Map();
+    const translatorBaseUrl = String(process.env.EPG_TRANSLATOR_URL || '').replace(/\/+$/, '');
+    let combinedCache = { xml: '', expiresAt: 0, promise: null, summary: null, results: null };
+    let translatedCache = { xml: '', expiresAt: 0, summary: null };
+    let translationPromise = null;
+
+    function trimTranslationCache() {
+        if (translationCache.size <= 50000) return;
+        const removeCount = translationCache.size - 40000;
+        const keys = translationCache.keys();
+        for (let i = 0; i < removeCount; i += 1) {
+            const next = keys.next();
+            if (next.done) break;
+            translationCache.delete(next.value);
+        }
+    }
+
+    async function translateTextBatch(source, language, texts) {
+        const output = new Map();
+        const missing = [];
+
+        for (const text of texts) {
+            const clean = String(text || '').trim();
+            if (!clean) continue;
+            const key = source + '|' + clean;
+            if (translationCache.has(key)) {
+                output.set(clean, translationCache.get(key));
+            } else {
+                missing.push(clean);
+            }
+        }
+
+        if (!missing.length || !translatorBaseUrl) return output;
+
+        const unique = Array.from(new Set(missing));
+        const batches = [];
+        let batch = [];
+        let chars = 0;
+
+        for (const text of unique) {
+            if (batch.length >= 40 || chars + text.length > 12000) {
+                batches.push(batch);
+                batch = [];
+                chars = 0;
+            }
+            batch.push(text);
+            chars += text.length;
+        }
+        if (batch.length) batches.push(batch);
+
+        for (const items of batches) {
+            const controller = new AbortController();
+            const timer = setTimeout(function () { controller.abort(); }, 120000);
+            try {
+                const response = await fetch(translatorBaseUrl + '/translate', {
+                    method: 'POST',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({
+                        q: items,
+                        source: language,
+                        target: 'it',
+                        format: 'text'
+                    }),
+                    signal: controller.signal
+                });
+
+                if (!response.ok) {
+                    throw new Error('HTTP ' + response.status);
+                }
+
+                const body = await response.json();
+                const translated = Array.isArray(body.translatedText)
+                    ? body.translatedText
+                    : [body.translatedText];
+
+                for (let i = 0; i < items.length; i += 1) {
+                    const original = items[i];
+                    const value = String(translated[i] || original);
+                    output.set(original, value);
+                    translationCache.set(source + '|' + original, value);
+                }
+                trimTranslationCache();
+            } finally {
+                clearTimeout(timer);
+            }
+        }
+
+        return output;
+    }
+
+    function collectProgrammeTexts(programmes) {
+        const texts = new Set();
+        const tagRe = /<(title|sub-title|desc)\b([^>]*)>([\s\S]*?)<\/\1>/gi;
+
+        for (const block of programmes) {
+            let match;
+            while ((match = tagRe.exec(block)) !== null) {
+                const inner = match[3];
+                if (!inner || /<[^>]+>/.test(inner)) continue;
+                const plain = decodeXmlText(inner).trim();
+                if (plain.length >= 2) texts.add(plain);
+            }
+        }
+        return Array.from(texts);
+    }
+
+    function applyProgrammeTranslations(programmes, translations) {
+        const tagRe = /<(title|sub-title|desc)\b([^>]*)>([\s\S]*?)<\/\1>/gi;
+
+        return programmes.map(function (block) {
+            return block.replace(tagRe, function (full, tag, attrs, inner) {
+                if (!inner || /<[^>]+>/.test(inner)) return full;
+                const plain = decodeXmlText(inner).trim();
+                const translated = translations.get(plain);
+                if (!translated || translated === plain) return full;
+                return '<' + tag + forceItalianLang(attrs) + '>' + encodeXmlText(translated) + '</' + tag + '>';
+            });
+        });
+    }
+
+    async function translateResult(result) {
+        if (!result || result.source === 'IT') return result;
+        const language = SOURCE_LANGUAGE[result.source];
+        if (!language || !translatorBaseUrl) return result;
+
+        const texts = collectProgrammeTexts(result.programmes);
+        if (!texts.length) return result;
+
+        const translations = await translateTextBatch(result.source, language, texts);
+        return {
+            source: result.source,
+            channels: result.channels,
+            programmes: applyProgrammeTranslations(result.programmes, translations)
+        };
+    }
+
+    function composeXml(results, summary) {
+        const channels = [];
+        const programmes = [];
+
+        for (const result of results) {
+            channels.push.apply(channels, result.channels);
+            programmes.push.apply(programmes, result.programmes);
+        }
+
+        const xml = '<?xml version="1.0" encoding="UTF-8"?>\n<tv>\n'
+            + channels.join('\n')
+            + (channels.length ? '\n' : '')
+            + programmes.join('\n')
+            + (programmes.length ? '\n' : '')
+            + '</tv>\n';
+
+        const nextSummary = Object.assign({}, summary, {
+            channels: channels.length,
+            programmes: programmes.length,
+            bytes: Buffer.byteLength(xml)
+        });
+
+        return { xml: xml, summary: nextSummary };
+    }
+
+    function startTranslation(results, summary) {
+        if (!translatorBaseUrl || translationPromise) return;
+
+        translationPromise = (async function () {
+            const translatedResults = [];
+            let translatedSources = 0;
+
+            for (const result of results) {
+                try {
+                    const translated = await translateResult(result);
+                    translatedResults.push(translated);
+                    if (translated !== result) translatedSources += 1;
+                } catch (error) {
+                    console.log('[vavoo] EPG translation failed for ' + result.source + ': ' + error.message);
+                    translatedResults.push(result);
+                }
+            }
+
+            const translated = composeXml(translatedResults, Object.assign({}, summary, {
+                translated: true,
+                translatedSources: translatedSources
+            }));
+
+            translatedCache = {
+                xml: translated.xml,
+                expiresAt: Date.now() + 30 * 60 * 1000,
+                summary: translated.summary
+            };
+
+            console.log(
+                '[vavoo] EPG translation ready sources=' + translatedSources
+                + ' cache=' + translationCache.size
+                + ' programmes=' + translated.summary.programmes
+            );
+        })().catch(function (error) {
+            console.log('[vavoo] EPG translation error: ' + error.message);
+        }).finally(function () {
+            translationPromise = null;
+        });
+    }
 
     async function getMap(country) {
         const cfg = getConfig(country);
@@ -393,43 +633,37 @@ function createEpgService() {
             throw new Error('No EPG sources available');
         }
 
-        const channels = [];
-        const programmes = [];
-
-        for (const result of results) {
-            channels.push.apply(channels, result.channels);
-            programmes.push.apply(programmes, result.programmes);
-        }
-
-        const xml = '<?xml version="1.0" encoding="UTF-8"?>\n<tv>\n'
-            + channels.join('\n')
-            + (channels.length ? '\n' : '')
-            + programmes.join('\n')
-            + (programmes.length ? '\n' : '')
-            + '</tv>\n';
-
         const summary = {
             stats: wantedResult.stats,
             sources: results.map(function (result) { return result.source; }),
             failed: failed,
-            channels: channels.length,
-            programmes: programmes.length,
-            bytes: Buffer.byteLength(xml)
+            translated: false
         };
 
+        const composed = composeXml(results, summary);
+
         console.log(
-            '[vavoo] EPG built sources=' + summary.sources.join(',')
+            '[vavoo] EPG built sources=' + composed.summary.sources.join(',')
             + ' failed=' + (failed.join(',') || 'none')
-            + ' channels=' + summary.channels
-            + ' programmes=' + summary.programmes
-            + ' bytes=' + summary.bytes
+            + ' channels=' + composed.summary.channels
+            + ' programmes=' + composed.summary.programmes
+            + ' bytes=' + composed.summary.bytes
         );
 
-        return { xml: xml, summary: summary };
+        return {
+            xml: composed.xml,
+            summary: composed.summary,
+            results: results
+        };
     }
 
     async function getCombinedXml(italy, foreign) {
+        if (translatedCache.xml && translatedCache.expiresAt > Date.now()) {
+            return { xml: translatedCache.xml, summary: translatedCache.summary };
+        }
+
         if (combinedCache.xml && combinedCache.expiresAt > Date.now()) {
+            if (combinedCache.results) startTranslation(combinedCache.results, combinedCache.summary);
             return { xml: combinedCache.xml, summary: combinedCache.summary };
         }
 
@@ -441,9 +675,11 @@ function createEpgService() {
                     xml: result.xml,
                     expiresAt: Date.now() + 15 * 60 * 1000,
                     promise: null,
-                    summary: result.summary
+                    summary: result.summary,
+                    results: result.results
                 };
-                return result;
+                startTranslation(result.results, result.summary);
+                return { xml: result.xml, summary: result.summary };
             })
             .catch(function (error) {
                 combinedCache.promise = null;
