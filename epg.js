@@ -210,40 +210,55 @@ function createEpgService() {
             if (batchIndex === 0 || (batchIndex + 1) % 10 === 0 || batchIndex === batches.length - 1) {
                 console.log('[vavoo] EPG translation progress source=' + source + ' batch=' + (batchIndex + 1) + '/' + batches.length);
             }
-            const controller = new AbortController();
-            const timer = setTimeout(function () { controller.abort(); }, 120000);
-            try {
-                const response = await fetch(translatorBaseUrl + '/translate', {
-                    method: 'POST',
-                    headers: { 'content-type': 'application/json' },
-                    body: JSON.stringify({
-                        q: items,
-                        source: language,
-                        target: 'it',
-                        format: 'text'
-                    }),
-                    signal: controller.signal
-                });
+            let lastError = null;
+            let translated = null;
 
-                if (!response.ok) {
-                    throw new Error('HTTP ' + response.status);
+            for (let attempt = 1; attempt <= 3; attempt += 1) {
+                const controller = new AbortController();
+                const timer = setTimeout(function () { controller.abort(); }, 120000);
+                try {
+                    const response = await fetch(translatorBaseUrl + '/translate', {
+                        method: 'POST',
+                        headers: { 'content-type': 'application/json' },
+                        body: JSON.stringify({
+                            q: items,
+                            source: language,
+                            target: 'it',
+                            format: 'text'
+                        }),
+                        signal: controller.signal
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('HTTP ' + response.status);
+                    }
+
+                    const body = await response.json();
+                    translated = Array.isArray(body.translatedText)
+                        ? body.translatedText
+                        : [body.translatedText];
+                    lastError = null;
+                    break;
+                } catch (error) {
+                    lastError = error;
+                    console.log('[vavoo] EPG translation retry source=' + source + ' batch=' + (batchIndex + 1) + '/' + batches.length + ' attempt=' + attempt + ' error=' + error.message);
+                    if (attempt < 3) {
+                        await new Promise(function (resolve) { setTimeout(resolve, attempt * 2000); });
+                    }
+                } finally {
+                    clearTimeout(timer);
                 }
-
-                const body = await response.json();
-                const translated = Array.isArray(body.translatedText)
-                    ? body.translatedText
-                    : [body.translatedText];
-
-                for (let i = 0; i < items.length; i += 1) {
-                    const original = items[i];
-                    const value = String(translated[i] || original);
-                    output.set(original, value);
-                    translationCache.set(source + '|' + original, value);
-                }
-                trimTranslationCache();
-            } finally {
-                clearTimeout(timer);
             }
+
+            if (lastError || !translated) throw lastError || new Error('translation failed');
+
+            for (let i = 0; i < items.length; i += 1) {
+                const original = items[i];
+                const value = String(translated[i] || original);
+                output.set(original, value);
+                translationCache.set(source + '|' + original, value);
+            }
+            trimTranslationCache();
         }
 
         return output;
