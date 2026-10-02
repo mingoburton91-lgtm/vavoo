@@ -907,6 +907,22 @@ function channelVariantName(value) {
     return suffix ? `${base} [${suffix[1].toUpperCase()}]` : base;
 }
 
+function isReliableLogoUrl(value) {
+    const logo = String(value || '').trim();
+    if (!logo) return false;
+    try {
+        const url = new URL(logo);
+        const host = normalize(url.hostname);
+        // Vavoo frequently returns logo.huhu.to URLs, but that host currently
+        // fails the TLS handshake in IPTV clients. Treat it as missing so the
+        // definitive playlist can fall back to the EPG/stable artwork sources.
+        if (host === 'logo.huhu.to' || host.endsWith('.huhu.to')) return false;
+        return url.protocol === 'https:' || url.protocol === 'http:';
+    } catch (_) {
+        return false;
+    }
+}
+
 function definitiveFallbackLogo(cleanName, country) {
     const name = normalize(String(cleanName || '')
         .replace(/\s*\[[cs]\]\s*$/i, '')
@@ -1060,14 +1076,14 @@ app.get('/lista-test.m3u8', async function (req, res) {
         const allRows = italyRows.concat(foreignRows);
         const siblingLogos = new Map();
         for (const row of allRows) {
-            if (!row.channel.logo) continue;
+            if (!isReliableLogoUrl(row.channel.logo)) continue;
             siblingLogos.set(`${normalize(row.country)}|${normalize(row.cleanName)}`, row.channel.logo);
         }
 
         const logoRequests = new Map();
         for (const row of allRows) {
             const siblingLogo = siblingLogos.get(`${normalize(row.country)}|${normalize(row.cleanName)}`);
-            if (row.channel.logo || siblingLogo || !row.epgId) continue;
+            if (isReliableLogoUrl(row.channel.logo) || siblingLogo || !row.epgId) continue;
             const key = normalize(row.country);
             if (!logoRequests.has(key)) logoRequests.set(key, { country: row.country, ids: new Set() });
             logoRequests.get(key).ids.add(row.epgId);
@@ -1087,7 +1103,7 @@ app.get('/lista-test.m3u8', async function (req, res) {
         let missingLogos = 0;
 
         function resolveLogo(row) {
-            if (row.channel.logo) return row.channel.logo;
+            if (isReliableLogoUrl(row.channel.logo)) return row.channel.logo;
 
             const siblingLogo = siblingLogos.get(`${normalize(row.country)}|${normalize(row.cleanName)}`);
             if (siblingLogo) {
@@ -1097,7 +1113,7 @@ app.get('/lista-test.m3u8', async function (req, res) {
 
             const countryLogos = epgLogos.get(normalize(row.country));
             const epgLogo = countryLogos && row.epgId ? countryLogos.get(row.epgId) : '';
-            if (epgLogo) {
+            if (isReliableLogoUrl(epgLogo)) {
                 epgFallbacks += 1;
                 return epgLogo;
             }
