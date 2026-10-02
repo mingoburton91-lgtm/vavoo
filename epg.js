@@ -154,6 +154,7 @@ function createEpgService() {
     const mapCache = new Map();
     const filteredCache = new Map();
     const translationCache = new Map();
+    const logoCache = new Map();
     const translatorBaseUrl = String(process.env.EPG_TRANSLATOR_URL || '').replace(/\/+$/, '');
     let combinedCache = { xml: '', expiresAt: 0, promise: null, summary: null, results: null };
     let translatedCache = { xml: '', expiresAt: 0, summary: null };
@@ -531,6 +532,11 @@ function createEpgService() {
         return match ? match[2] : '';
     }
 
+    function channelIcon(block) {
+        const match = String(block || '').match(/<icon\b[^>]*\bsrc=(['"])(.*?)\1[^>]*\/?\s*>/i);
+        return match ? decodeXmlText(match[2]).trim() : '';
+    }
+
     async function filterSource(source, wantedIds) {
         if (!wantedIds || !wantedIds.size) {
             return { source: source, channels: [], programmes: [] };
@@ -600,8 +606,13 @@ function createEpgService() {
                     : xmlAttribute(block, 'channel');
 
                 if (id && wantedIds.has(id)) {
-                    if (type === 'channel') channels.push(block);
-                    else programmes.push(block);
+                    if (type === 'channel') {
+                        channels.push(block);
+                        const icon = channelIcon(block);
+                        if (icon) logoCache.set(source + '|' + id, icon);
+                    } else {
+                        programmes.push(block);
+                    }
                 }
             }
         }
@@ -618,6 +629,40 @@ function createEpgService() {
         });
 
         return data;
+    }
+
+    async function getLogos(country, ids) {
+        const cfg = getConfig(country);
+        const result = new Map();
+        if (!cfg) return result;
+
+        const wanted = new Set(Array.from(ids || []).map(function (id) {
+            return String(id || '').trim();
+        }).filter(Boolean));
+
+        if (!wanted.size) return result;
+
+        const missing = new Set();
+        for (const id of wanted) {
+            const cached = logoCache.get(cfg.source + '|' + id);
+            if (cached) result.set(id, cached);
+            else missing.add(id);
+        }
+
+        if (missing.size) {
+            try {
+                await filterSource(cfg.source, missing);
+            } catch (error) {
+                console.log('[vavoo] EPG logo lookup failed for ' + cfg.source + ': ' + error.message);
+            }
+
+            for (const id of missing) {
+                const cached = logoCache.get(cfg.source + '|' + id);
+                if (cached) result.set(id, cached);
+            }
+        }
+
+        return result;
     }
 
     async function buildCombinedXml(italy, foreign) {
@@ -738,6 +783,7 @@ function createEpgService() {
         countryCodes: countryCodes,
         getMap: getMap,
         lookupId: lookupId,
+        getLogos: getLogos,
         getCombinedXml: getCombinedXml,
         countrySourceUrl: function (country) {
             const cfg = getConfig(country);
