@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const http = require('node:http');
 const https = require('node:https');
 const express = require('express');
+const sharp = require('sharp');
 const { Readable } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
 const { createEpgService } = require('./epg');
@@ -923,6 +924,130 @@ function isReliableLogoUrl(value) {
     }
 }
 
+
+const LOGO_PROXY_VERSION = 'v1';
+const logoProxyCache = new Map();
+
+function logoProxySecret() {
+    return String(process.env.LOGO_PROXY_SECRET || '');
+}
+
+function signLogoPayload(payload) {
+    const secret = logoProxySecret();
+    if (!secret) return '';
+    return crypto.createHmac('sha256', secret).update(payload).digest('base64url').slice(0, 24);
+}
+
+function makeUniversalLogoUrl(req, sourceUrl, label) {
+    const source = String(sourceUrl || '').trim();
+    if (!source) return '';
+    const secret = logoProxySecret();
+    if (!secret) return source;
+    const payload = Buffer.from(JSON.stringify({ u: source, l: String(label || 'TV') }), 'utf8').toString('base64url');
+    const signature = signLogoPayload(payload);
+    const proto = String(req.headers['x-forwarded-proto'] || req.protocol).split(',')[0];
+    return proto + '://' + req.headers.host + '/logos/' + LOGO_PROXY_VERSION + '/' + payload + '.' + signature + '/logo.png';
+}
+
+function verifyLogoToken(token) {
+    const split = String(token || '').lastIndexOf('.');
+    if (split <= 0) return null;
+    const payload = token.slice(0, split);
+    const signature = token.slice(split + 1);
+    const expected = signLogoPayload(payload);
+    if (!expected || signature.length !== expected.length) return null;
+    const a = Buffer.from(signature);
+    const b = Buffer.from(expected);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+    try {
+        const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+        const source = String(parsed.u || '').trim();
+        const label = String(parsed.l || 'TV').trim();
+        const url = new URL(source);
+        if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+        return { source, label };
+    } catch (_) {
+        return null;
+    }
+}
+
+function escapeSvgText(value) {
+    return String(value || 'TV')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+}
+
+async function normalizeLogoToPng(source, label) {
+    let input = null;
+    try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 10000);
+        try {
+            const response = await fetch(source, {
+                redirect: 'follow',
+                headers: {
+                    'user-agent': 'Mozilla/5.0 (compatible; VavooLogoProxy/1.0)',
+                    'accept': 'image/avif,image/webp,image/png,image/svg+xml,image/*,*/*;q=0.8'
+                },
+                signal: controller.signal
+            });
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            const declaredLength = Number(response.headers.get('content-length') || 0);
+            if (declaredLength > 5 * 1024 * 1024) throw new Error('image too large');
+            const buffer = Buffer.from(await response.arrayBuffer());
+            if (!buffer.length || buffer.length > 5 * 1024 * 1024) throw new Error('invalid image size');
+            input = buffer;
+        } finally {
+            clearTimeout(timer);
+        }
+        return await sharp(input, { density: 144 })
+            .resize({ width: 512, height: 288, fit: 'inside', withoutEnlargement: true })
+            .png({ compressionLevel: 9 })
+            .toBuffer();
+    } catch (error) {
+        const safe = escapeSvgText(label).slice(0, 42);
+        const svg = Buffer.from(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="512" height="288">'
+            + '<rect width="100%" height="100%" rx="28" fill="#111"/>'
+            + '<text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" '
+            + 'font-family="Arial,Helvetica,sans-serif" font-size="42" font-weight="700" fill="#fff">'
+            + safe + '</text></svg>'
+        );
+        console.log('[vavoo] logo proxy fallback label=' + label + ' error=' + error.message);
+        return await sharp(svg).png({ compressionLevel: 9 }).toBuffer();
+    }
+}
+
+app.get('/logos/' + LOGO_PROXY_VERSION + '/:token/logo.png', async function (req, res) {
+    try {
+        const decoded = verifyLogoToken(req.params.token);
+        if (!decoded) return res.status(404).send('Logo not found');
+
+        const cacheKey = req.params.token;
+        let png = logoProxyCache.get(cacheKey);
+        if (!png) {
+            png = await normalizeLogoToPng(decoded.source, decoded.label);
+            logoProxyCache.set(cacheKey, png);
+            if (logoProxyCache.size > 400) {
+                const first = logoProxyCache.keys().next();
+                if (!first.done) logoProxyCache.delete(first.value);
+            }
+        }
+
+        res.setHeader('Content-Type', 'image/png');
+        res.setHeader('Content-Length', String(png.length));
+        res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.status(200).send(png);
+    } catch (error) {
+        console.log('[vavoo] logo proxy error ' + error.message);
+        res.status(500).send('Logo unavailable');
+    }
+});
+
 function definitiveFallbackLogo(cleanName, country) {
     const name = normalize(String(cleanName || '')
         .replace(/\s*\[[cs]\]\s*$/i, '')
@@ -1102,7 +1227,7 @@ app.get('/lista-test.m3u8', async function (req, res) {
         let epgFallbacks = 0;
         let missingLogos = 0;
 
-        function resolveLogo(row) {
+        function resolveLogoSource(row) {
             if (isReliableLogoUrl(row.channel.logo)) return row.channel.logo;
 
             const siblingLogo = siblingLogos.get(`${normalize(row.country)}|${normalize(row.cleanName)}`);
@@ -1126,6 +1251,11 @@ app.get('/lista-test.m3u8', async function (req, res) {
 
             missingLogos += 1;
             return '';
+        }
+
+        function resolveLogo(row) {
+            const source = resolveLogoSource(row);
+            return source ? makeUniversalLogoUrl(req, source, row.cleanName) : '';
         }
 
         const epgUrl = String(req.headers['x-forwarded-proto'] || req.protocol).split(',')[0] + '://' + req.headers.host + '/epg.xml';
