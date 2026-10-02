@@ -360,7 +360,7 @@ function createEpgService() {
 
             translatedCache = {
                 xml: translated.xml,
-                expiresAt: Date.now() + 30 * 60 * 1000,
+                expiresAt: Date.now() + 12 * 60 * 60 * 1000,
                 summary: translated.summary
             };
 
@@ -679,7 +679,26 @@ function createEpgService() {
     }
 
     async function getCombinedXml(italy, foreign) {
-        if (translatedCache.xml && translatedCache.expiresAt > Date.now()) {
+        if (translatedCache.xml) {
+            if (translatedCache.expiresAt <= Date.now() && !combinedCache.promise && !translationPromise) {
+                combinedCache.promise = buildCombinedXml(italy, foreign)
+                    .then(function (result) {
+                        combinedCache = {
+                            xml: result.xml,
+                            expiresAt: Date.now() + 15 * 60 * 1000,
+                            promise: null,
+                            summary: result.summary,
+                            results: result.results
+                        };
+                        startTranslation(result.results, result.summary);
+                        return { xml: result.xml, summary: result.summary };
+                    })
+                    .catch(function (error) {
+                        combinedCache.promise = null;
+                        console.log('[vavoo] EPG background refresh failed: ' + error.message);
+                        return { xml: translatedCache.xml, summary: translatedCache.summary };
+                    });
+            }
             return { xml: translatedCache.xml, summary: translatedCache.summary };
         }
 
