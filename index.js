@@ -907,6 +907,61 @@ function channelVariantName(value) {
     return suffix ? `${base} [${suffix[1].toUpperCase()}]` : base;
 }
 
+function definitiveFallbackLogo(cleanName, country) {
+    const name = normalize(String(cleanName || '')
+        .replace(/\s*\[[cs]\]\s*$/i, '')
+        .replace(/\s*\[[^\]]+\]\s*/g, ' ')
+        .replace(/\b(?:hd|fhd|uhd|4k)\b/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim());
+    const countryKey = normalize(country);
+
+    const tvLogoBase = 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/';
+
+    if (countryKey === 'italy') {
+        if (name === 'rai 3') return tvLogoBase + 'countries/italy/rai-3-it.png';
+        if (name.startsWith('sky primafila')) return tvLogoBase + 'countries/italy/sky-primafila-it.png';
+        if (name.startsWith('sky sport football')) return tvLogoBase + 'countries/italy/sky-sport-football-it.png';
+        if (name === 'discovery k2') return tvLogoBase + 'countries/italy/k2-it.png';
+        if (name === 'nat geo') return tvLogoBase + 'countries/italy/national-geographic-it.png';
+        if (name === 'rsi la 1') return tvLogoBase + 'countries/switzerland/rsi-la1-ch.png';
+        if (name === 'rsi la 2') return tvLogoBase + 'countries/switzerland/rsi-la2-ch.png';
+        if (name.startsWith('radio number one')) return tvLogoBase + 'countries/italy/radio-number-one-tv-it.png';
+        if (name.startsWith('radio studio delta')) return tvLogoBase + 'countries/italy/radio-studio-delta-it.png';
+        if (name.startsWith('radio 105')) return 'https://commons.wikimedia.org/wiki/Special:Redirect/file/Radio%20105%20italy%202023.png';
+        if (name.startsWith('sky cinema stories')) return 'https://jaruba.github.io/channel-logos/export/transparent-color/eia3wASVi2KULA1hgy0gXIeSihs.png';
+        if (name.startsWith('eurosport 4 timvision') || name.startsWith('eurosport 6 timvision')) {
+            return 'https://jaruba.github.io/channel-logos/export/transparent-color/AfhbW2Y6X9uwoZAgoP0cOfSPoH7.png';
+        }
+        if (name === 'discovery science') {
+            return 'https://jaruba.github.io/channel-logos/export/transparent-color/afxnsEk7jsfQlVbK0scU6gcuUeu.png';
+        }
+    }
+
+    if (countryKey === 'france' && name.startsWith('canal+ live')) {
+        return tvLogoBase + 'countries/france/canal-plus-sport-fr.png';
+    }
+    if (countryKey === 'france' && name === 'dazn 2') {
+        return 'https://jaruba.github.io/channel-logos/export/transparent-color/kGipWQCpZcafdYmF0NICQmKw0uQ.png';
+    }
+    if (countryKey === 'germany' && name === 'sky sport mix') {
+        return tvLogoBase + 'countries/germany/sky-sport/sky-sport-mix-de.png';
+    }
+    if (countryKey === 'germany' && (name === 'sky sports f1' || name === 'sky sport f1')) {
+        return tvLogoBase + 'countries/germany/sky-sport/sky-sport-f1-de.png';
+    }
+    if (countryKey === 'albania' && name.startsWith('arena sport 3')) {
+        return tvLogoBase + 'countries/croatia/arena-sport-3-hr.png';
+    }
+    if (countryKey === 'netherlands' && name.startsWith('ziggo sport')) {
+        return tvLogoBase + 'countries/netherlands/ziggo-sport-nl.png';
+    }
+
+    // Final safety net for rare/local feeds without a published artwork source:
+    // keep every definitive-playlist entry visually identifiable instead of blank.
+    return 'https://placehold.co/512x288/111111/FFFFFF/png?text=' + encodeURIComponent(String(cleanName || 'TV'));
+}
+
 function loadCombinedWhitelist() {
     const lines = fs.readFileSync(require('node:path').join(__dirname, 'combined-whitelist.txt'), 'utf8')
         .split(/\r?\n/)
@@ -1047,6 +1102,12 @@ app.get('/lista-test.m3u8', async function (req, res) {
                 return epgLogo;
             }
 
+            const fallbackLogo = definitiveFallbackLogo(row.cleanName, row.country);
+            if (fallbackLogo) {
+                missingLogos += 1;
+                return fallbackLogo;
+            }
+
             missingLogos += 1;
             return '';
         }
@@ -1072,7 +1133,7 @@ app.get('/lista-test.m3u8', async function (req, res) {
 
         console.log(
             `[vavoo] lista-test selected Italy=${italyRows.length} SPORT_MONDO=${foreignRows.length} `
-            + `logos sibling=${siblingFallbacks} epg=${epgFallbacks} missing=${missingLogos}`
+            + `logos sibling=${siblingFallbacks} epg=${epgFallbacks} finalFallback=${missingLogos}`
         );
         setPlaylistHeaders(res);
         res.send(output.join('\n'));
