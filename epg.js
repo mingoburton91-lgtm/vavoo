@@ -203,7 +203,13 @@ function createEpgService() {
         }
         if (batch.length) batches.push(batch);
 
-        for (const items of batches) {
+        console.log('[vavoo] EPG translation source=' + source + ' language=' + language + ' texts=' + unique.length + ' batches=' + batches.length);
+
+        for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
+            const items = batches[batchIndex];
+            if (batchIndex === 0 || (batchIndex + 1) % 10 === 0 || batchIndex === batches.length - 1) {
+                console.log('[vavoo] EPG translation progress source=' + source + ' batch=' + (batchIndex + 1) + '/' + batches.length);
+            }
             const controller = new AbortController();
             const timer = setTimeout(function () { controller.abort(); }, 120000);
             try {
