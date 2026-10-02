@@ -278,57 +278,9 @@ Germany|SKY SPORT
 Switzerland|SKY SPORT
 
 # GROUP: SKY ESTERO — catalog candidates; nonexistent entries are ignored automatically
-United Kingdom|SKY ARTS
-United Kingdom|SKY ATLANTIC
-United Kingdom|SKY CINEMA COMEDY
-United Kingdom|SKY CINEMA HITS
-United Kingdom|SKY CINEMA SELECT
-United Kingdom|SKY COMEDY
-United Kingdom|SKY CRIME
-United Kingdom|SKY DOCUMENTARIES
-United Kingdom|SKY DRAMA
-United Kingdom|SKY FAMILY
-United Kingdom|SKY GREATS
-United Kingdom|SKY HISTORY
-United Kingdom|SKY KIDS
-United Kingdom|SKY NATURE
-United Kingdom|SKY NEWS
-United Kingdom|SKY SCIFI
-United Kingdom|SKY SCIFI HORROR
 United Kingdom|SKY SPORTS
 United Kingdom|SKY SPORTS FOOTBALL
 United Kingdom|SKY SPORTS NFL
-United Kingdom|SKY WITNESS
-Germany|SKY ATLANTIC
-Germany|SKY ATLANTIC HD
-Germany|SKY ATLANTIC RAW
-Germany|SKY CINEMA
-Germany|SKY CINEMA ACTION
-Germany|SKY CINEMA ACTION HD
-Germany|SKY CINEMA ACTION HEVC
-Germany|SKY CINEMA ACTION RAW
-Germany|SKY CINEMA CLASSICS
-Germany|SKY CINEMA CLASSICS HD
-Germany|SKY CINEMA FAMILY
-Germany|SKY CINEMA FAMILY HD
-Germany|SKY CINEMA FAMILY HEVC
-Germany|SKY CINEMA FAMILY RAW
-Germany|SKY CINEMA HIGHLIGHTS
-Germany|SKY CRIME
-Germany|SKY CRIME HD RAW
-Germany|SKY CRIME HEVC
-Germany|SKY DOCUMENTARIES
-Germany|SKY DOCUMENTARIES RAW
-Germany|SKY KRIMI
-Germany|SKY KRIMI HD
-Germany|SKY KRIMI RAW
-Germany|SKY NATURE
-Germany|SKY NATURE RAW
-Germany|SKY ONE
-Germany|SKY REPLAY
-Germany|SKY REPLAY HEVC
-Germany|SKY REPLAY RAW
-Germany|SKY SHOWCASE
 Germany|SKY SPORT 1
 Germany|SKY SPORT 1 HD
 Germany|SKY SPORT 1 HEVC
@@ -376,21 +328,6 @@ Germany|SKY SPORT TOP EVENT UHD
 Germany|SKY SPORT UHD
 Germany|SKY SPORTS F1
 Germany|SKY SPORTS GOLF UHD
-Austria|SKY ATLANTIK
-Austria|SKY CINEMA ACTION
-Austria|SKY CINEMA
-Austria|SKY CINEMA BEST OF
-Austria|SKY CINEMA FAMILY
-Austria|SKY CINEMA HIGHLIGHTS HD
-Austria|SKY CINEMA PREMIEREN +24
-Austria|SKY CINEMA SPECIAL
-Austria|SKY CINEMA THRILLER
-Austria|SKY COMEDY
-Austria|SKY DOCUMENTARIES
-Austria|SKY KRIMI
-Austria|SKY NATURE
-Austria|SKY NOSTALGIE
-Austria|SKY ONE
 Austria|SKYSPOAUSTRIA
 Austria|SKY SPORT F1
 Austria|SKY SPORT GOLF
@@ -398,7 +335,6 @@ Austria|SKY SPORT MIX
 Austria|SKY SPORT NEWS
 Austria|SKY SPORT PREMIER LEAGUE
 Austria|SKY SPORT TENNIS
-Switzerland|SKY ATLANTIC D
 Switzerland|SKY BUNDESLIGA
 Switzerland|SKY BUNDESLIGA 1
 Switzerland|SKY BUNDESLIGA 2
@@ -410,57 +346,12 @@ Switzerland|SKY BUNDESLIGA 7
 Switzerland|SKY BUNDESLIGA 8
 Switzerland|SKY BUNDESLIGA 9
 Switzerland|SKY BUNDESLIGA 10
-Switzerland|SKY CINEMA D
-Switzerland|SKY CINEMA
-Switzerland|SKY CRIME
-Switzerland|SKY DOCUMENTARIES
-Switzerland|SKY KRIMI
-Switzerland|SKY MIX
-Switzerland|SKY NATURE
-Switzerland|SKY NEWS INTERNATIONAL
-Switzerland|SKY ONE D
-Switzerland|SKY SHOWCASE
-Switzerland|SKY SHOW
 Switzerland|SKY SPORT 1 D
 Switzerland|SKY SPORT 2 D
 Switzerland|SKY SPORT BUNDESLIGA
 Switzerland|SKY SPORT GOLF
 
 # SKY ESTERO aliases/additional catalogue spellings
-United Kingdom|SKY ACTION HD
-United Kingdom|SKY ACTION
-United Kingdom|SKY ADVENTURE HD
-United Kingdom|SKY ADVENTURE
-United Kingdom|SKY ARTS HD
-United Kingdom|SKY ATLANTIC +1
-United Kingdom|SKY ATLANTIC HD
-United Kingdom|SKY CINEMA HITS HD
-United Kingdom|SKY COMEDY HD
-United Kingdom|SKY CRIME +1
-United Kingdom|SKY CRIME HD
-United Kingdom|SKY DOCUMENTARIES HD
-United Kingdom|SKY DRAMA HD
-United Kingdom|SKY FAMILY HD
-United Kingdom|SKY GREATS HD
-United Kingdom|SKY HISTORY +1
-United Kingdom|SKY HISTORY 2 HD
-United Kingdom|SKY HISTORY 2
-United Kingdom|SKY HISTORY HD
-United Kingdom|SKY KIDS HD
-United Kingdom|SKY MEGA HITS HD
-United Kingdom|SKY MIX HD
-United Kingdom|SKY NATURE HD
-United Kingdom|SKY NEWS HD
-United Kingdom|SKY ONE HD
-United Kingdom|SKY PREMIERE +1
-United Kingdom|SKY PREMIERE HD
-United Kingdom|SKY PREMIERE
-United Kingdom|SKY REPLAY
-United Kingdom|SKY SCIFI HORROR HD
-United Kingdom|SKY SCI-FI HD
-United Kingdom|SKY THRILLER HD
-United Kingdom|SKY WITNESS +1
-United Kingdom|SKY WITNESS HD
 United Kingdom|SKY SPORTS ACTION
 United Kingdom|SKY SPORTS ACTION HD
 United Kingdom|SKY SPORTS BOX OFFICE
@@ -507,7 +398,6 @@ United Kingdom|SKYSP RACING HD
 United Kingdom|SKYSP RACING
 United Kingdom|SKYSP TENNIS HD
 United Kingdom|SKYSP+
-Germany|SKY CINEMA PREMIERE HD
 Germany|SKY SPORT BUNDESLIGA
 Germany|SKY SPORT BUNDESLIGA UHD
 Germany|SKY SPORT BUNDESLIGA 1
