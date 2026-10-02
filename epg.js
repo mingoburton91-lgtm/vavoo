@@ -57,9 +57,9 @@ const SOURCE_LANGUAGE = {
 
 
 const ITALY_GUIDE_SOURCES = [
-    { name: 'raiplay.it', url: 'https://iptv-org.github.io/epg/guides/it/raiplay.it.epg.xml.gz' },
-    { name: 'mediaset.it', url: 'https://iptv-org.github.io/epg/guides/it/mediaset.it.epg.xml.gz' },
-    { name: 'guidatv.sky.it', url: 'https://iptv-org.github.io/epg/guides/it/guidatv.sky.it.epg.xml.gz' }
+    { name: 'raiplay.it', url: 'https://iptv-org.github.io/epg/guides/it/raiplay.it.xml.gz' },
+    { name: 'mediaset.it', url: 'https://iptv-org.github.io/epg/guides/it/mediaset.it.xml.gz' },
+    { name: 'guidatv.sky.it', url: 'https://iptv-org.github.io/epg/guides/it/guidatv.sky.it.xml.gz' }
 ];
 
 function decodeXmlText(value) {
