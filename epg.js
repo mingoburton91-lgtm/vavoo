@@ -194,7 +194,7 @@ function createEpgService() {
         let chars = 0;
 
         for (const text of unique) {
-            if (batch.length >= 40 || chars + text.length > 12000) {
+            if (batch.length >= 12 || chars + text.length > 4000) {
                 batches.push(batch);
                 batch = [];
                 chars = 0;
@@ -344,7 +344,7 @@ function createEpgService() {
             const translatedResults = new Array(results.length);
             let translatedSources = 0;
             let nextIndex = 0;
-            const workerCount = Math.min(3, Math.max(1, results.length));
+            const workerCount = 1;
 
             async function worker() {
                 while (true) {
