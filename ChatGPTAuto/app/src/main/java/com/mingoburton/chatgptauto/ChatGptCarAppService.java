@@ -47,7 +47,7 @@ public class ChatGptCarAppService extends CarAppService {
             Row info = new Row.Builder()
                     .setTitle("ChatGPT Voce")
                     .addText(status)
-                    .addText("Apre direttamente ChatGPT Voice sul telefono.")
+                    .addText("Apre una nuova sessione nell'app ChatGPT; con Avvia con Voce attivo parte automaticamente.")
                     .build();
 
             Action start = new Action.Builder()
@@ -74,7 +74,7 @@ public class ChatGptCarAppService extends CarAppService {
                         Intent.FLAG_ACTIVITY_CLEAR_TOP
                 );
                 getCarContext().startActivity(bridge);
-                status = "Avvio ChatGPT Voice sul telefono…";
+                status = "Apro ChatGPT sul telefono…";
             } catch (Exception e) {
                 status = "Android Auto ha bloccato l'apertura sul telefono.";
             }
