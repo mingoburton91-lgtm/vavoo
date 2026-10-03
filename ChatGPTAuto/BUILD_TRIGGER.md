@@ -1,2 +1,2 @@
 Build trigger for ChatGPT Auto APK.
-Retry after Android Auto metadata fix.
+Build v1.2 template launcher.
