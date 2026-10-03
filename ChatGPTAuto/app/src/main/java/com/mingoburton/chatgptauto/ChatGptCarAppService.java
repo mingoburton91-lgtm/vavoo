@@ -1,6 +1,5 @@
 package com.mingoburton.chatgptauto;
 
-import android.app.PendingIntent;
 import android.content.Intent;
 
 import androidx.annotation.NonNull;
@@ -46,48 +45,39 @@ public class ChatGptCarAppService extends CarAppService {
         @Override
         public Template onGetTemplate() {
             Row info = new Row.Builder()
-                    .setTitle("ChatGPT Voce · v1.4")
+                    .setTitle("ChatGPT Voce")
                     .addText(status)
-                    .addText("Apre direttamente l'app ChatGPT. Nessun collegamento web.")
+                    .addText("Apre direttamente ChatGPT Voice sul telefono.")
                     .build();
 
-            Action voice = new Action.Builder()
+            Action start = new Action.Builder()
                     .setTitle("AVVIA VOCE")
-                    .setOnClickListener(this::launchPhoneTrampoline)
+                    .setOnClickListener(this::launchBridge)
                     .build();
 
             Pane pane = new Pane.Builder()
                     .addRow(info)
-                    .addAction(voice)
+                    .addAction(start)
                     .build();
 
             return new PaneTemplate.Builder(pane)
-                    .setTitle("ChatGPT Auto · v1.4")
+                    .setTitle("ChatGPT Auto")
                     .setHeaderAction(Action.APP_ICON)
                     .build();
         }
 
-        private void launchPhoneTrampoline() {
-            CarContext context = getCarContext();
-
-            Intent phoneIntent = new Intent(context, VoiceLaunchActivity.class);
-            phoneIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-            phoneIntent.putExtra("from_car", true);
-
-            PendingIntent pendingIntent = PendingIntent.getActivity(
-                    context,
-                    140,
-                    phoneIntent,
-                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
-            );
-
+        private void launchBridge() {
             try {
-                pendingIntent.send();
-                status = "Richiesta inviata al telefono.";
-            } catch (PendingIntent.CanceledException e) {
-                status = "Avvio sul telefono non riuscito.";
+                Intent bridge = new Intent(getCarContext(), VoiceBridgeActivity.class);
+                bridge.addFlags(
+                        Intent.FLAG_ACTIVITY_NEW_TASK |
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP
+                );
+                getCarContext().startActivity(bridge);
+                status = "Avvio ChatGPT Voice sul telefono…";
+            } catch (Exception e) {
+                status = "Android Auto ha bloccato l'apertura sul telefono.";
             }
-
             invalidate();
         }
     }
