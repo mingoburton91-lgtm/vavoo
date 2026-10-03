@@ -7,6 +7,12 @@ on:
     paths:
       - 'ChatGPTAuto/**'
       - '.github/workflows/build-chatgpt-auto.yml'
+  pull_request:
+    branches:
+      - chatgpt-auto-build
+    paths:
+      - 'ChatGPTAuto/**'
+      - '.github/workflows/build-chatgpt-auto.yml'
   workflow_dispatch:
 
 jobs:
