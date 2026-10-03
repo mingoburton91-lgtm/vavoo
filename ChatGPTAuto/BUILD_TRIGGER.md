@@ -1,2 +1,2 @@
 Build trigger for ChatGPT Auto APK.
-Build v1.3 native ChatGPT voice activity launcher.
+Build v1.4 native trampoline, no web fallback.
