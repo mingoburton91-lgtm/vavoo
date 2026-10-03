@@ -1,7 +1,6 @@
 package com.mingoburton.chatgptauto;
 
 import android.app.Activity;
-import android.content.ComponentName;
 import android.content.Intent;
 import android.os.Bundle;
 import android.widget.Toast;
@@ -9,35 +8,45 @@ import android.widget.Toast;
 public class VoiceBridgeActivity extends Activity {
 
     private static final String CHATGPT_PACKAGE = "com.openai.chatgpt";
-    private static final String CHATGPT_VOICE_ACTIVITY =
-            "com.openai.voice.assistant.AssistantActivity";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        launchVoice();
+        launchChatGptFresh();
     }
 
-    private void launchVoice() {
+    private void launchChatGptFresh() {
         try {
-            Intent voice = new Intent();
-            voice.setComponent(new ComponentName(
-                    CHATGPT_PACKAGE,
-                    CHATGPT_VOICE_ACTIVITY
-            ));
-            voice.addFlags(
+            Intent launch = getPackageManager().getLaunchIntentForPackage(CHATGPT_PACKAGE);
+
+            if (launch == null) {
+                Toast.makeText(
+                        this,
+                        "App ChatGPT ufficiale non trovata.",
+                        Toast.LENGTH_LONG
+                ).show();
+                finish();
+                return;
+            }
+
+            // Start the official ChatGPT app as a fresh task.
+            // If ChatGPT Settings > Voice > Start with Voice is enabled,
+            // ChatGPT itself should start Voice on a new/empty conversation.
+            launch.addFlags(
                     Intent.FLAG_ACTIVITY_NEW_TASK |
-                    Intent.FLAG_ACTIVITY_CLEAR_TOP |
-                    Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    Intent.FLAG_ACTIVITY_CLEAR_TASK |
+                    Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
             );
-            startActivity(voice);
+
+            startActivity(launch);
         } catch (Exception e) {
             Toast.makeText(
                     this,
-                    "ChatGPT Voice non può essere avviato direttamente su questa versione.",
+                    "Impossibile aprire l'app ChatGPT.",
                     Toast.LENGTH_LONG
             ).show();
         }
+
         finish();
     }
 }
