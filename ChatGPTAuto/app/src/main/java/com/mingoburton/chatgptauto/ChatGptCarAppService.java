@@ -2,8 +2,8 @@ package com.mingoburton.chatgptauto;
 
 import android.app.ActivityOptions;
 import android.content.ActivityNotFoundException;
+import android.content.ComponentName;
 import android.content.Intent;
-import android.net.Uri;
 import android.view.Display;
 
 import androidx.annotation.NonNull;
@@ -21,11 +21,12 @@ import androidx.car.app.validation.HostValidator;
 public class ChatGptCarAppService extends CarAppService {
 
     private static final String CHATGPT_PACKAGE = "com.openai.chatgpt";
+    private static final String CHATGPT_VOICE_ACTIVITY =
+            "com.openai.voice.assistant.AssistantActivity";
 
     @NonNull
     @Override
     public HostValidator createHostValidator() {
-        // This is a personal/debug sideload build, so allow the connected Android Auto host.
         return HostValidator.ALLOW_ALL_HOSTS_VALIDATOR;
     }
 
@@ -54,12 +55,12 @@ public class ChatGptCarAppService extends CarAppService {
             Row info = new Row.Builder()
                     .setTitle("ChatGPT Voce")
                     .addText(status)
-                    .addText("ChatGPT si apre sul telefono e l'audio continua attraverso l'auto.")
+                    .addText("Avvia direttamente la conversazione vocale nell'app ChatGPT.")
                     .build();
 
             Action start = new Action.Builder()
                     .setTitle("AVVIA VOCE")
-                    .setOnClickListener(this::openChatGptOnPhone)
+                    .setOnClickListener(this::openChatGptVoice)
                     .build();
 
             Pane pane = new Pane.Builder()
@@ -73,34 +74,53 @@ public class ChatGptCarAppService extends CarAppService {
                     .build();
         }
 
-        private void openChatGptOnPhone() {
+        private void openChatGptVoice() {
             CarContext context = getCarContext();
-
-            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://chatgpt.com/"));
-            intent.setPackage(CHATGPT_PACKAGE);
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
             ActivityOptions options = ActivityOptions.makeBasic();
             options.setLaunchDisplayId(Display.DEFAULT_DISPLAY);
 
+            // Directly invoke ChatGPT's exported voice-assistant activity.
+            Intent voiceIntent = new Intent();
+            voiceIntent.setComponent(new ComponentName(
+                    CHATGPT_PACKAGE,
+                    CHATGPT_VOICE_ACTIVITY
+            ));
+            voiceIntent.addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK |
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP |
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP
+            );
+
             try {
-                context.startActivity(intent, options.toBundle());
-                status = "ChatGPT avviato sul telefono. Puoi parlare.";
+                context.startActivity(voiceIntent, options.toBundle());
+                status = "ChatGPT Voce avviato sul telefono. Puoi parlare.";
+                invalidate();
+                return;
             } catch (ActivityNotFoundException e) {
-                try {
-                    Intent launch = context.getPackageManager().getLaunchIntentForPackage(CHATGPT_PACKAGE);
-                    if (launch != null) {
-                        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-                        context.startActivity(launch, options.toBundle());
-                        status = "ChatGPT avviato sul telefono. Puoi parlare.";
-                    } else {
-                        status = "ChatGPT non risulta installato sul telefono.";
-                    }
-                } catch (Exception ex) {
-                    status = "Impossibile avviare ChatGPT sul telefono.";
+                // Fall through to the normal ChatGPT app launch.
+            } catch (SecurityException e) {
+                // Fall through if a future ChatGPT build stops exporting the activity.
+            } catch (Exception e) {
+                // Fall through to normal app launch.
+            }
+
+            try {
+                Intent launch = context.getPackageManager()
+                        .getLaunchIntentForPackage(CHATGPT_PACKAGE);
+
+                if (launch != null) {
+                    launch.addFlags(
+                            Intent.FLAG_ACTIVITY_NEW_TASK |
+                            Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    );
+                    context.startActivity(launch, options.toBundle());
+                    status = "Modalità voce diretta non disponibile: aperta l'app ChatGPT.";
+                } else {
+                    status = "ChatGPT non risulta installato sul telefono.";
                 }
             } catch (Exception e) {
-                status = "Android Auto ha bloccato l'avvio. Riprova a vettura ferma.";
+                status = "Android ha bloccato l'avvio di ChatGPT.";
             }
 
             invalidate();
