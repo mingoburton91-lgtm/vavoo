@@ -1,2 +1,2 @@
 Build trigger for ChatGPT Auto APK.
-Build v1.2 template launcher retry with AndroidX.
+Build v1.3 native ChatGPT voice activity launcher.
