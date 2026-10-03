@@ -1,2 +1,2 @@
 Build trigger for ChatGPT Auto APK.
-Retry 2 after Android SDK workflow fix.
+Retry 3 with preinstalled SDK manager path.
